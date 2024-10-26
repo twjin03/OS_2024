@@ -568,10 +568,38 @@ static void
 wakeup1(void *chan)
 {
   struct proc *p;
+  int min_vrun = ~0; // minimum vruntime 초기화
+  int is_run = 0;
+  int vrun_1tick;
 
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == SLEEPING && p->chan == chan)
+
+  // RUNNABLE 프로세스가 있는지 확인하고 최소 vruntime 찾기
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if (p->state == RUNNABLE) {
+      is_run = 1;
+      // 최소 vruntime 업데이트
+      if (min_vrun > p->vruntime) {
+          min_vrun = p->vruntime;
+      }
+    }
+  }
+  
+  //sleeping 프로세스의 vruntime 업데이트 
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->state == SLEEPING && p->chan == chan) {
+
+      vrun_1tick = 1024/(weight_table[p->nice]);
+
+      if(is_run){
+        //다른 runnable 프로세스가 있는 경우 
+        p -> vruntime = min_vrun - vrun_1tick; // vruntime 업데이트 
+      }
+      else {
+        p->vruntime = 0; 
+      }
       p->state = RUNNABLE;
+    }
+  }    
 }
 
 // Wake up all processes sleeping on chan.

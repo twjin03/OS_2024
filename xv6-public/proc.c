@@ -630,9 +630,8 @@ void ps(int pid){
  // if pid == 0, print out all process's information
  // otherwise, print out corresponding process's information
  // if there is no process corresponding to pid, print out nothing
-
-
  // no return value 
 
+//proj2
 }
 

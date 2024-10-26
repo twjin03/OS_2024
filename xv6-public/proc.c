@@ -413,6 +413,7 @@ scheduler(void) // 시스템 스케줄러, 무한 루프를 돌며 실행 가능
       c->proc = 0;  
     }
 
+    release(&ptable.lock); // 프로세스 테이블의 잠금 해제
   }
   
 
@@ -447,10 +448,10 @@ scheduler(void) // 시스템 스케줄러, 무한 루프를 돌며 실행 가능
       // It should have changed its p->state before coming back.
       c->proc = 0;  // 현재 CPU에서 실행 중인 프로세스를 초기화 (현재 CPU가 어떤 프로세스도 실행하고 있지 않음을 나타냄)
     }
-    */
+  
     release(&ptable.lock); // 프로세스 테이블의 잠금 해제 -> 다른 스케줄러나 프로세스가 프로세스 테이블에 접근 가능 
-
   }
+  */
 }
 
 // Enter scheduler.  Must hold only ptable.lock

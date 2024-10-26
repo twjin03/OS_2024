@@ -77,14 +77,18 @@ trap(struct trapframe *tf)
 
       //runtime과 vruntime을 update
       struct proc *p = myproc();
-      if (p) {
+      if (p && p->state == RUNNING) {
         int delta_runtime = 1;  // 각 tick이 1단위의 시간이라고 가정
 
+        //runtime업데이트
         p->runtime += delta_runtime;
 
-        
+        //vruntime업데이트
         int weight = weight_table[p->nice];
         p->vruntime += delta_runtime * (weight_table[20] / weight);
+
+        //runtime_d_weight업데이트 
+        p->runtime_d_weight = p->runtime / weight_table[p->nice];
 
         // 현재 프로세스의 실행 시간과 타임 슬라이스 비교
         if (p->runtime >= p->time_slice) {

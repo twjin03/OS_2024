@@ -76,6 +76,14 @@ trap(struct trapframe *tf)
       ticks++;             // ticks 변수를 증가시키고, 특정 조건에서 yield를 호출해 프로세스를 교체 
       wakeup(&ticks);
       release(&tickslock);
+
+      // nice 값 20의 weight는 1024
+      int base_weight = 1024;
+      int weight = weight_table[myproc()->nice];
+      int delta_runtime = 1;  // 각 tick이 1단위의 시간이라고 가정
+
+    
+      myproc()->vruntime += delta_runtime * (base_weight / weight);
     }
     lapiceoi();
     break;

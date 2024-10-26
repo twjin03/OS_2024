@@ -117,13 +117,12 @@ found:
   // int weight; //(pa2) 프로세스 가중치 
 
   // 초기화 수행
-  uint runtime_d_weight = 0; //(pa2)-ps output 
-  uint time_slice = 0; //(pa2) ???
+  p->runtime_d_weight = 0; //(pa2)-ps output 
+  
+  p->runtime = 0; //(pa2)-ps output 총 런타임, 프로세스가 실제로 CPU를 사용한 시간
+  p->vruntime = 0; //(pa2)-ps output 가상 런타임
 
-  uint runtime = 0; //(pa2)-ps output 총 런타임, 프로세스가 실제로 CPU를 사용한 시간
-  uint vruntime = 0; //(pa2)-ps output 가상 런타임
-
-  // uint total_tick; //(pa2)-ps output 프로세스가 실행된 총 tick 수, 이 값은 프로세스의 실행 빈도와 관련 있음 
+  p->total_tick = 0; //(pa2)-ps output 프로세스가 실행된 총 tick 수, 이 값은 프로세스의 실행 빈도와 관련 있음 
 
   release(&ptable.lock);
 
@@ -745,6 +744,7 @@ get_timeepoch()
 */
 
 
+//overview
 // - In this project, you need to  implement the following
 //     1. Impelment CFS on xv6 
 //         1. CFS must operate well so that runtime increases in accordance with priority
@@ -755,6 +755,8 @@ get_timeepoch()
 //     - We base our scoring on the output printed by ps()
 //         - even if CFS is well impelented, if ps fails to properly display the values, you may not receive a score
 
+
+//Proj2. Implement CFS on xv6
 // • Implement CFS on xv6
 // – Select process with minimum virtual runtime from runnable processes
 // – Update runtime/vruntime for each timer interrupt
@@ -789,6 +791,8 @@ get_timeepoch()
 // process expires
 // – This is by default in xv6
 
+
+//Modify ps system call 
 // • To check if CFS is implemented properly, ps() should be
 // modified
 // • Sample output (mytest.c)
@@ -804,7 +808,7 @@ get_timeepoch()
 
 
 
-
+//FAQs
 // • Please refer to the trap.c file for anything related to timer interrupts
 
 

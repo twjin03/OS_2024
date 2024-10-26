@@ -75,9 +75,14 @@ trap(struct trapframe *tf)
       acquire(&tickslock);
       ticks++;             // ticks 변수를 증가시키고, 특정 조건에서 yield를 호출해 프로세스를 교체 
 
+      //runtime과 vruntime을 update
       struct proc *p = myproc();
       if (p) {
         int delta_runtime = 1;  // 각 tick이 1단위의 시간이라고 가정
+
+        p->runtime += delta_runtime;
+
+        
         int weight = weight_table[p->nice];
         p->vruntime += delta_runtime * (weight_table[20] / weight);
 

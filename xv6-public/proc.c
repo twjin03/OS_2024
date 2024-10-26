@@ -239,6 +239,13 @@ fork(void) //부모프로세스(curproc)의 상태를 복사해 새로운 자식
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
 
+  //(pa2)
+  // 자식 프로세스가 부모 프로세스의 runtime, vruntime, nice_value를 상속받도록 수정
+  np->runtime = curproc->runtime; // 부모의 runtime 상속
+  np->vruntime = curproc->vruntime; // 부모의 vruntime 상속
+  np->nice = curproc->nice; // 부모의 nice value 상속
+
+
   for(i = 0; i < NOFILE; i++)
     if(curproc->ofile[i])
       np->ofile[i] = filedup(curproc->ofile[i]);

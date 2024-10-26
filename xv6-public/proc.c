@@ -415,8 +415,6 @@ scheduler(void) // 시스템 스케줄러, 무한 루프를 돌며 실행 가능
 
     release(&ptable.lock); // 프로세스 테이블의 잠금 해제
   }
-  
-
 
   /* 기존 코드
   for(;;){ // 무한 루프 시작 -> 스케줄러가 계속해서 프로세스를 찾고 실행하도록 함 
@@ -805,15 +803,14 @@ get_timeepoch()
 
 
 
+
+
 // • Please refer to the trap.c file for anything related to timer interrupts
 
 
 // • You don't need to consider situations where runtime or vruntime is
 // too large (exceeding the range of int)
 
-// • The vruntime formula on page 8 is for conceptual explanation.
-
-// Please refer to page 11 for the actual implementation.
 // • You don't need to worry about anything related to exec()
 // • Do not worry about runtime at the time of wakeup
 

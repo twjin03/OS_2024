@@ -8,49 +8,58 @@
 #include "traps.h"
 #include "spinlock.h"
 
+// 시스템 interrupt 및 예외 처리 
+// syscall, timer interrrupt와 같은 주요 trap 
+
+
 // Interrupt descriptor table (shared by all CPUs).
 struct gatedesc idt[256];
 extern uint vectors[];  // in vectors.S: array of 256 entry pointers
 struct spinlock tickslock;
 uint ticks;
 
+// Interrupt Descriptor Table (IDT)를 초기화 
 void
 tvinit(void)
 {
   int i;
 
-  for(i = 0; i < 256; i++)
+  for(i = 0; i < 256; i++)  //256개의 interrupt 벡터에 SETGATE 매크로 사용해 게이트 설정 
     SETGATE(idt[i], 0, SEG_KCODE<<3, vectors[i], 0);
   SETGATE(idt[T_SYSCALL], 1, SEG_KCODE<<3, vectors[T_SYSCALL], DPL_USER);
-
-  initlock(&tickslock, "time");
+  // T_SYSCALL 트랩은 사용자 모드에서 사용할 수 있도록 설정 
+  initlock(&tickslock, "time");  // tickslock이라는 스핀락을 초기화 -> ticks 변수를 보호하는 데 사용 
 }
 
+
+// IDT를 memory에 load 
 void
 idtinit(void)
 {
-  lidt(idt, sizeof(idt));
+  lidt(idt, sizeof(idt));  // IDT를 로드하여 인터럽트가 발생할 수 있도록 준비 
 }
 
+
+//interrupt와 예외를 처리하는 메인 핸들러 
 //PAGEBREAK: 41
 void
 trap(struct trapframe *tf)
 {
-  if(tf->trapno == T_SYSCALL){
+  if(tf->trapno == T_SYSCALL){ // T_SYSCALL이 발생하면 
     if(myproc()->killed)
       exit();
-    myproc()->tf = tf;
-    syscall();
+    myproc()->tf = tf;  // process의 trapframe을 저장하고
+    syscall();          // syscall 함수를 호출하여 시스템 콜을 처리 
     if(myproc()->killed)
       exit();
     return;
   }
 
   switch(tf->trapno){
-  case T_IRQ0 + IRQ_TIMER:
+  case T_IRQ0 + IRQ_TIMER:  // timer interrupt인 경우 
     if(cpuid() == 0){
       acquire(&tickslock);
-      ticks++;
+      ticks++;             // ticks 변수를 증가시키고, 특정 조건에서 yield를 호출해 프로세스를 교체 
       wakeup(&ticks);
       release(&tickslock);
     }
@@ -110,3 +119,6 @@ trap(struct trapframe *tf)
   if(myproc() && myproc()->killed && (tf->cs&3) == DPL_USER)
     exit();
 }
+
+// trap 함수는 프로세스가 종료되었는지(killed 상태) 확인하고, 종료가 필요할 경우 프로세스를 강제로 종료함
+// 타이머 인터럽트가 발생하면 yield를 호출해 프로세스가 CPU를 양보하도록 함

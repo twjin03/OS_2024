@@ -12,26 +12,35 @@ struct {
   struct proc proc[NPROC]; //프로세스 배열(최대프로세스 수)
 } ptable; //운영체제가 관리하는 프로세스 테이블 
 
-static struct proc *initproc;
+static struct proc *initproc; //초기 사용자 프로세스 
 
-int nextpid = 1;
+int nextpid = 1; //새 프로세스에 할당할 고유 pid 
+
+//프로세스 제어에 사용되는 외부 함수들 
 extern void forkret(void);
 extern void trapret(void);
 
 static void wakeup1(void *chan);
 
+
+//프로세스 테이블 접근 시 사용할 락 초기화 
 void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
 }
 
+
+// 현재 CPU의 ID를 반환, 다중 CPU 시스템에서 CPU간 스케줄링 관리를 위헤 필요
 // Must be called with interrupts disabled
 int
 cpuid() {
   return mycpu()-cpus;
 }
 
+
+// 현재 실행 중인 CPU를 반환. 
+// lapicid를 사용해 APIC ID로 CPU를 찾고, 실패 시 panic을 호출해 에러를 보고 
 // Must be called with interrupts disabled to avoid the caller being
 // rescheduled between reading lapicid and running through the loop.
 struct cpu*
@@ -86,7 +95,7 @@ allocproc(void) //새로운 프로세스 할당
   return 0;
 
 found:
-  p->state = EMBRYO; //EMBRYO 상태로 변경
+  p->state = EMBRYO; //EMBRYO 상태로 변경(초기화)
   p->pid = nextpid++;
 
   //set default nice value 20
@@ -94,7 +103,7 @@ found:
 
   release(&ptable.lock);
 
-  // Allocate kernel stack.
+  // Allocate kernel stack. 
   if((p->kstack = kalloc()) == 0){
     p->state = UNUSED;
     return 0;
@@ -120,13 +129,14 @@ found:
 
 //PAGEBREAK: 32
 // Set up first user process.
+// 첫 번째 사용자 프로세스를 설정 
 void
-userinit(void)
+userinit(void)  
 {
   struct proc *p;
   extern char _binary_initcode_start[], _binary_initcode_size[];
 
-  p = allocproc();
+  p = allocproc();  // 프로세스 할당 
   
   initproc = p;
   if((p->pgdir = setupkvm()) == 0)
@@ -323,37 +333,42 @@ wait(void) //부모프로세스가 자식 프로세스의 종료를 기다림
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
 void
-scheduler(void)
+scheduler(void) // 시스템 스케줄러, 무한 루프를 돌며 실행 가능한 프로세스를 찾아 CPU에서 실행 
 {
-  struct proc *p;
-  struct cpu *c = mycpu();
-  c->proc = 0;
+  struct proc *p;  // 프로세서를 가리키는 포인터 
+  struct cpu *c = mycpu();  // 현재 CPU
+  c->proc = 0;  // 현재 CPU에서 실행 중인 프로세스를 초기화 
   
-  for(;;){
+  for(;;){ // 무한 루프 시작 -> 스케줄러가 계속해서 프로세스를 찾고 실행하도록 함 
     // Enable interrupts on this processor.
-    sti();
+    sti();  // 현재 CPU에서 인터럽트를 활성화 
 
     // Loop over process table looking for process to run.
-    acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
+    acquire(&ptable.lock);  // 프로세스 테이블을 순회하기 위해 ptable.lock을 획득 
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){ 
+    // 프로세스 테이블의 각 프로세스를 순회하기 위해 포인터 p를 초기화
+    // NPROC는 프로세스의 최대 수를 나타냄 
+
+      if(p->state != RUNNABLE) 
         continue;
+      // 현재 프로세스 p의 상태가 RUNNABLE(실행 가능 상태)가 아닌 경우, 다음 프로세스로 넘어감
+
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
+      c->proc = p;  // 현재 CPU에서 실행할 프로세스를 p로 설정 
+      switchuvm(p); //  프로세스 p의 주소 공간으로 전환 -> 프로세스가 자신의 memory 공간 사용할 수 있도록 함 
+      p->state = RUNNING;  // 프로세스의 상태를 RUNNING으로 변경 
 
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
+      swtch(&(c->scheduler), p->context);  // CPU scheduler 컨텍스트에서 프로세스 p의 컨텍스트로 변경 -> CPU가 프로세스 실행하도록
+      switchkvm(); // 커널 가상 메모리 공간으로 전환, 프로세스가 실행을 마치고 커널 모드로 돌아올 때 호출됨
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
-      c->proc = 0;
+      c->proc = 0;  // 현재 CPU에서 실행 중인 프로세스를 초기화 (현재 CPU가 어떤 프로세스도 실행하고 있지 않음을 나타냄)
     }
-    release(&ptable.lock);
+    release(&ptable.lock); // 프로세스 테이블의 잠금 해제 -> 다른 스케줄러나 프로세스가 프로세스 테이블에 접근 가능 
 
   }
 }
@@ -366,27 +381,29 @@ scheduler(void)
 // break in the few places where a lock is held but
 // there's no process.
 void
-sched(void)
+sched(void) // 현재 실행 중인 프로세스를 안전하게 중단하고 다른 프로세스가 실행되도록 스케줄링
 {
-  int intena;
+  int intena; // 인터럽트 활성화 상태를 저장하는 변수
   struct proc *p = myproc();
+  // p는 현재 실행 중인 프로세스를 가리키는 포인터
+  // myproc() 함수는 현재 프로세스의 포인터를 반환합니다.
 
-  if(!holding(&ptable.lock))
-    panic("sched ptable.lock");
-  if(mycpu()->ncli != 1)
-    panic("sched locks");
-  if(p->state == RUNNING)
-    panic("sched running");
-  if(readeflags()&FL_IF)
-    panic("sched interruptible");
-  intena = mycpu()->intena;
-  swtch(&p->context, mycpu()->scheduler);
-  mycpu()->intena = intena;
+  if(!holding(&ptable.lock))    // 프로세스 테이블의 잠금을 유지하고 있지 않으면 panic 상태 에 빠짐
+    panic("sched ptable.lock"); // (스케줄링 과정에서 프로세스 테이블에 대한 동시 접근을 방지하기 위한 안전장치)
+  if(mycpu()->ncli != 1) // ncli는 인터럽트 잠금 수준을 나타냄, 이 값이 1이 아니면 스케줄링 과정에서 잠금이 올바르지 않음을 나타냄
+    panic("sched locks"); // 현재 CPU에서 커널 인터럽트가 활성화된 상태에서 호출되면 패닉 상태에 빠짐
+  if(p->state == RUNNING) //현재 프로세스 p의 상태가 RUNNING인 경우 패닉 상태에 빠짐
+    panic("sched running"); // 스케줄링 수행하는 동안 현재 프로세스가 실행 중일 수 없기 때문
+  if(readeflags()&FL_IF) // 현재 CPU의 플래그 레지스터에서 인터럽트가 활성화된 경우 패닉 상태로
+    panic("sched interruptible"); // 스케줄링이 진행되는 동안 인터럽트가 활성화되어서는 안됨
+  intena = mycpu()->intena; // 현재 CPU의 인터럽트 활성화 상태를 intena 변수에 저장, 나중에 스케줄링이 끝난 후 원래 상태로 복원하기 위해 필요
+  swtch(&p->context, mycpu()->scheduler); // swtch 함수를 호출하여 현재 프로세스의 컨텍스트에서 CPU 스케줄러의 컨텍스트로 전환
+  mycpu()->intena = intena; // 이전에 저장한 인터럽트 활성화 상태를 복원. 이제 스케줄링이 완료된 후 프로세스의 실행 상태가 이전과 같게 됨
 }
 
 // Give up the CPU for one scheduling round.
 void
-yield(void)
+yield(void) // 현재 실행 중인 프로세스가 CPU를 양보하고, 다른 프로세스가 실행될 수 있도록 스케줄러를 호출하는 역할
 {
   acquire(&ptable.lock);  //DOC: yieldlock
   myproc()->state = RUNNABLE;
@@ -395,24 +412,28 @@ yield(void)
 }
 
 // A fork child's very first scheduling by scheduler()
-// will swtch here.  "Return" to user space.
+// will swtch here.  "Return" to user space. 
+// 이 함수가 사용자 공간으로 "복귀"하는 역할을 한다는 점에 주목
 void
-forkret(void)
+forkret(void) // fork 호출로 생성된 자식 프로세스가 처음으로 스케줄링될 때 호출됨
 {
-  static int first = 1;
+  static int first = 1; // forkret 함수가 처음 호출되었는지를 나타내는 플래그
   // Still holding ptable.lock from scheduler.
-  release(&ptable.lock);
+  release(&ptable.lock); // 이 잠금은 스케줄러에서 이미 획득된 상태이므로, 현재 프로세스의 상태를 업데이트하고 다른 프로세스가 프로세스 테이블에 접근할 수 있도록 해줌
 
-  if (first) {
+  if (first) {  // first 변수가 1인 경우, 즉 이 함수가 처음 호출될 때를 체크 
     // Some initialization functions must be run in the context
     // of a regular process (e.g., they call sleep), and thus cannot
     // be run from main().
-    first = 0;
+    first = 0; // first 변수를 0으로 설정하여, 이후에 이 블록이 다시 실행되지 않도록 함, 즉 forkret이 호출될 때마다 초기화 코드를 한 번만 실행하도록
     iinit(ROOTDEV);
     initlog(ROOTDEV);
   }
 
   // Return to "caller", actually trapret (see allocproc).
+  // forkret 함수가 "호출자"로 돌아간다는 것을 설명
+  // 실제로는 trapret으로 돌아가게 되며, 
+  // 이는 프로세스가 사용자 공간으로 복귀하기 위한 과정
 }
 
 // Atomically release lock and sleep on chan.
@@ -420,12 +441,12 @@ forkret(void)
 void
 sleep(void *chan, struct spinlock *lk)
 {
-  struct proc *p = myproc();
+  struct proc *p = myproc(); // 현재 실행 중인 프로세스를 가져옴
   
-  if(p == 0)
+  if(p == 0)  // 현재 프로세스가 존재하지 않음
     panic("sleep");
 
-  if(lk == 0)
+  if(lk == 0) // 제공된 락 포인터(lk)가 NULL이면 오류
     panic("sleep without lk");
 
   // Must acquire ptable.lock in order to
@@ -436,16 +457,17 @@ sleep(void *chan, struct spinlock *lk)
   // so it's okay to release lk.
   if(lk != &ptable.lock){  //DOC: sleeplock0
     acquire(&ptable.lock);  //DOC: sleeplock1
-    release(lk);
+    release(lk); 
+    // 두 락이 동시에 유지되는 것 방지 
   }
   // Go to sleep.
-  p->chan = chan;
+  p->chan = chan; // 프로세스가 대기할 채널을 설정 
   p->state = SLEEPING;
 
   sched();
 
   // Tidy up.
-  p->chan = 0;
+  p->chan = 0; // 프로세스가 깨어날 때 대기할 채널을 초기화. 이제 채널은 더 이상 유효하지 않으므로 NULL로 설정
 
   // Reacquire original lock.
   if(lk != &ptable.lock){  //DOC: sleeplock2
@@ -632,6 +654,90 @@ void ps(int pid){
  // if there is no process corresponding to pid, print out nothing
  // no return value 
 
-//proj2
 }
 
+
+// pa2 
+// 예상 수정 사항 
+/*
+update_runtime()  // updates the actual runtime and virtual runtime 
+get_timeslice()  
+get_timeepoch()
+*/
+
+
+// - In this project, you need to  implement the following
+//     1. Impelment CFS on xv6 
+//         1. CFS must operate well so that runtime increases in accordance with priority
+//         2. vruntime and time slice must be properly calculated 
+//         3. upon wake up, the defined rule must be strictly followed 
+//     2. Modify ps system call to output appropriate value 
+//         1. runtime/weight, runtime, vruntime, and total tick 
+//     - We base our scoring on the output printed by ps()
+//         - even if CFS is well impelented, if ps fails to properly display the values, you may not receive a score
+
+// • Implement CFS on xv6
+// – Select process with minimum virtual runtime from runnable processes
+// – Update runtime/vruntime for each timer interrupt
+// – If task runs more than time slice, enforce a yield of the CPU
+// – Default nice value is 20, ranging from 0 to 39, and weight of nice 20 is
+// 1024
+// – Nice(0~39) to weight(Although there is formula, hard-code pre-defined array like Linux)
+// 𝑤𝑒𝑖𝑔ℎ𝑡 =
+// 1024
+// 1.25 𝑛𝑖𝑐𝑒−20 .
+// – Time slice calculation (our scheduling latency is 10ticks)
+// – vruntime calculation
+// 𝑣𝑟𝑢𝑛𝑡𝑖𝑚𝑒 += Δ𝑟𝑢𝑛𝑡𝑖𝑚𝑒 ×
+// 𝑤𝑒𝑖𝑔ℎ𝑡 𝑜𝑓 𝑛𝑖𝑐𝑒 20 (1024)
+// 𝑤𝑒𝑖𝑔ℎ𝑡 𝑜𝑓 𝑐𝑢𝑟𝑟𝑒𝑛𝑡 𝑝𝑟𝑜𝑐𝑒𝑠�
+
+
+// • How about newly forked process?
+// – A process inherits the parent process’s runtime, vruntime, and nice value
+// • How about woken process?
+// – When a process is woken up, its virtual runtime gets
+//  (minimum vruntime of processes in the ready queue – vruntime(1tick) )
+// 𝑣𝑟𝑢𝑛𝑡𝑖𝑚𝑒 1𝑡𝑖𝑐𝑘 = 1𝑡𝑖𝑐𝑘 ×
+// 𝑤𝑒𝑖𝑔ℎ𝑡 𝑜𝑓 𝑛𝑖𝑐𝑒 20 (1024)
+// 𝑤𝑒𝑖𝑔ℎ𝑡 𝑜𝑓 𝑐𝑢𝑟𝑟𝑒𝑛𝑡 𝑝𝑟𝑜𝑐𝑒𝑠𝑠
+// (If there is no process in the RUNNABLE state when a process wakes up,
+// you can set the vruntime of the process to be woken up to “0”)
+// • DO NOT call sched() during a wake-up of a process
+// – Ensure that the time slice of the current process expires
+// • Woken-up process will have the minimum vruntime (by the formula above)
+// • But we do NOT want to schedule the woken-up process before the time slice of current
+// process expires
+// – This is by default in xv6
+
+// • To check if CFS is implemented properly, ps() should be
+// modified
+// • Sample output (mytest.c)
+// – Print out the following information about the processes
+// – Use millitick unit (multiply the tick by 1000)
+// • runtime/weight, runtime, vruntime, total tick
+// – Do NOT use float/double types to present runtime and vruntime
+// – Kernel avoid floating point operation as much as possible
+// – There's no need for the output to match the sample exactly
+// – Check whether the runtime corresponds with the priority and
+// whether the vruntime of the processes is similar
+
+
+// • Project 2 should be done based on your project 1 code
+// • Please refer to the trap.c file for anything related to timer interrupts
+// • This project is not related to future projects
+// • You don't need to consider situations where runtime or vruntime is
+// too large (exceeding the range of int)
+// • The vruntime formula on page 8 is for conceptual explanation.
+// Please refer to page 11 for the actual implementation.
+// • You don't need to worry about anything related to exec()
+// • Do not worry about runtime at the time of wakeup
+
+// • Please implement CFS on xv6 and modify ps()
+// • Use the submit & check-submission binary file in
+// Ui Server
+// – make clean
+// – $ ~swe3004/bin/submit pa2 xv6-public
+// – you can submit several times, and the submission history
+// can be checked through check-submission
+// • Only the last submission will be graded

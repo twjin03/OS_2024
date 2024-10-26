@@ -50,7 +50,7 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
 
-  int nice;  //pa1에서 추가
+  int nice;  //(pa1)
 };
 
 // Process memory is laid out contiguously, low addresses first:
@@ -58,3 +58,21 @@ struct proc {
 //   original data and bss
 //   fixed-size stack
 //   expandable heap
+
+
+// pa1 수정 예상 사항 
+/*
+int pri  // priority if the process -> nice value, 이미 pa1에서 수정 완료 
+int weight // weight baseed on priority of process
+uint64 vruntime 
+uint64 aruntime // actual runtime 
+
+???
+uint64 runtick //running tick 
+uint64 timeslice // assigned time slice 
+uint64 vnice // high-level vruntime? overflow 발생한 횟수 
+???
+
+uint64 starttime  // time when the process wakes up and execute
+uint64 interval // the scheduler period for the process
+*/

@@ -51,6 +51,12 @@ struct proc {
   char name[16];               // Process name (debugging)
 
   int nice;  //(pa1)
+  
+  int weight; //(pa2) 프로세스 가중치 
+  uint runtime; //(pa2) 총 런타임 
+  uint vruntime; //(pa2) 가상 런타임
+  
+
 };
 
 // Process memory is laid out contiguously, low addresses first:

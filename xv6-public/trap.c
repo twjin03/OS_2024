@@ -8,6 +8,20 @@
 #include "traps.h"
 #include "spinlock.h"
 
+// nice value에 따른 weight hard coding 
+const int weight_table[40] = {
+ /* 0  */     88761,     71755,     56483,     46273,     36291,
+ /* 5  */     29154,     23254,     18705,     14949,     11916,
+ /* 10 */      9548,      7620,      6100,      4904,      3906,
+ /* 15 */      3121,      2501,      1991,      1586,      1277,
+ /* 20 */      1024,       820,       655,       526,       423,
+ /* 25 */       335,       272,       215,       172,       137,
+ /* 30 */       110,        87,        70,        56,        45,
+ /* 35 */        36,        29,        23,        18,        15,
+};
+
+
+
 // 시스템 interrupt 및 예외 처리 
 // syscall, timer interrrupt와 같은 주요 trap 
 
@@ -60,8 +74,32 @@ trap(struct trapframe *tf)
     if(cpuid() == 0){
       acquire(&tickslock);
       ticks++;             // ticks 변수를 증가시키고, 특정 조건에서 yield를 호출해 프로세스를 교체 
+
+      //runtime과 vruntime을 update
+      struct proc *p = myproc();
+      if (p && p->state == RUNNING) {
+        int delta_runtime = 1;  // 각 tick이 1단위의 시간이라고 가정
+
+        //runtime업데이트
+        p->runtime += delta_runtime;
+
+        //vruntime업데이트
+        int weight = weight_table[p->nice];
+        p->vruntime += delta_runtime * (weight_table[20] / weight);
+
+        //runtime_d_weight업데이트 
+        p->runtime_d_weight = p->runtime / weight_table[p->nice];
+
+        // 현재 프로세스의 실행 시간과 타임 슬라이스 비교
+        if (p->runtime >= p->time_slice) {
+          yield(); // CPU를 양보
+        }
+
+      }
+
       wakeup(&ticks);
-      release(&tickslock);
+      release(&tickslock);       
+           
     }
     lapiceoi();
     break;

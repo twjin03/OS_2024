@@ -7,6 +7,19 @@
 #include "proc.h"
 #include "spinlock.h" 
 
+// nice value에 따른 weight hard coding 
+const int weight_table[40] = {
+ /* 0  */     88761,     71755,     56483,     46273,     36291,
+ /* 5  */     29154,     23254,     18705,     14949,     11916,
+ /* 10 */      9548,      7620,      6100,      4904,      3906,
+ /* 15 */      3121,      2501,      1991,      1586,      1277,
+ /* 20 */      1024,       820,       655,       526,       423,
+ /* 25 */       335,       272,       215,       172,       137,
+ /* 30 */       110,        87,        70,        56,        45,
+ /* 35 */        36,        29,        23,        18,        15,
+};
+
+
 struct {
   struct spinlock lock; //프로세스 테이블 접근 시 동시성 문제 방지 위한 스핀락
   struct proc proc[NPROC]; //프로세스 배열(최대프로세스 수)
@@ -99,7 +112,17 @@ found:
   p->pid = nextpid++;
 
   //set default nice value 20
-  p->nice = 20; 
+  p->nice = 20;  // 기본 nice 값은 20으로 초기화
+
+  // int weight; //(pa2) 프로세스 가중치 
+
+  // 초기화 수행
+  p->runtime_d_weight = 0; //(pa2)-ps output 
+  
+  p->runtime = 0; //(pa2)-ps output 총 런타임, 프로세스가 실제로 CPU를 사용한 시간
+  p->vruntime = 0; //(pa2)-ps output 가상 런타임
+
+  p->total_tick = 0; //(pa2)-ps output 프로세스가 실행된 총 tick 수, 이 값은 프로세스의 실행 빈도와 관련 있음 
 
   release(&ptable.lock);
 
@@ -215,6 +238,13 @@ fork(void) //부모프로세스(curproc)의 상태를 복사해 새로운 자식
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
+
+  //(pa2)
+  // 자식 프로세스가 부모 프로세스의 runtime, vruntime, nice_value를 상속받도록 수정
+  np->runtime = curproc->runtime; // 부모의 runtime 상속
+  np->vruntime = curproc->vruntime; // 부모의 vruntime 상속
+  np->nice = curproc->nice; // 부모의 nice value 상속
+
 
   for(i = 0; i < NOFILE; i++)
     if(curproc->ofile[i])
@@ -338,7 +368,61 @@ scheduler(void) // 시스템 스케줄러, 무한 루프를 돌며 실행 가능
   struct proc *p;  // 프로세서를 가리키는 포인터 
   struct cpu *c = mycpu();  // 현재 CPU
   c->proc = 0;  // 현재 CPU에서 실행 중인 프로세스를 초기화 
-  
+
+  for(;;){ // 무한 루프 시작 -> 스케줄러가 계속해서 프로세스를 찾고 실행하도록 함 
+    // Enable interrupts on this processor.
+    sti();  // 현재 CPU에서 인터럽트를 활성화 
+
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);  // 프로세스 테이블을 순회하기 위해 ptable.lock을 획득
+
+
+    int total_weight = 0; // 총 weight 값을 초기화 (total weight of runqueue)
+    // ptable 순회하며 total_weight 계산
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){ 
+      if(p->state == RUNNABLE) { // 실행 가능한 프로세스에 대해
+        total_weight += weight_table[p->nice]; // 프로세스의 weight를 누적
+      }
+    }
+
+    struct proc *most_p = 0; // 가장 작은 vruntime을 가진 프로세스 포인터 초기화
+    uint min_vruntime = ~0; // 최대 값으로 초기화하여 최소 vruntime을 찾기 쉽게 함 ~0 == 0xFFFFFFFF
+
+    // - Select process with minimum virtual runtime from runnable processes
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){ 
+      if(p->state == RUNNABLE) { // 실행 가능한 프로세스에 대해
+        if(p->vruntime < min_vruntime) { // 현재 프로세스의 vruntime이 최소값보다 작으면
+          min_vruntime = p->vruntime; // 최소 vruntime 업데이트
+          most_p = p; // 가장 작은 vruntime을 가진 프로세스 저장
+        }
+      }
+    }
+
+    // 가장 작은 vruntime을 가진 프로세스가 발견되었다면 실행
+    if(most_p) { // time_slice 계산
+      most_p->time_slice = (10 * weight_table[most_p->nice]) / total_weight; // 기본 time slice 계산
+      // – Time slice calculation (our scheduling latency is 10ticks)
+      if ((10 * weight_table[most_p->nice]) % total_weight != 0) { // 올림을 위한 조건
+        most_p->time_slice++; // 정수 시간으로 올림
+      }
+
+      // 스케줄링을 위한 프로세스 준비
+      c->proc = most_p; // 현재 CPU에서 실행할 프로세스를 most_p로 설정 
+      switchuvm(most_p); // 프로세스의 주소 공간으로 전환 
+      most_p->state = RUNNING; // 프로세스의 상태를 RUNNING으로 변경 
+
+      // 프로세스 실행
+      swtch(&(c->scheduler), most_p->context); // 스케줄러의 컨텍스트에서 most_p의 컨텍스트로 변경 
+      switchkvm(); // 커널 가상 메모리 공간으로 전환
+
+      // 현재 CPU에서 실행 중인 프로세스를 초기화
+      c->proc = 0;  
+    }
+
+    release(&ptable.lock); // 프로세스 테이블의 잠금 해제
+  }
+
+  /* 기존 코드
   for(;;){ // 무한 루프 시작 -> 스케줄러가 계속해서 프로세스를 찾고 실행하도록 함 
     // Enable interrupts on this processor.
     sti();  // 현재 CPU에서 인터럽트를 활성화 
@@ -368,9 +452,10 @@ scheduler(void) // 시스템 스케줄러, 무한 루프를 돌며 실행 가능
       // It should have changed its p->state before coming back.
       c->proc = 0;  // 현재 CPU에서 실행 중인 프로세스를 초기화 (현재 CPU가 어떤 프로세스도 실행하고 있지 않음을 나타냄)
     }
+  
     release(&ptable.lock); // 프로세스 테이블의 잠금 해제 -> 다른 스케줄러나 프로세스가 프로세스 테이블에 접근 가능 
-
   }
+  */
 }
 
 // Enter scheduler.  Must hold only ptable.lock
@@ -483,10 +568,38 @@ static void
 wakeup1(void *chan)
 {
   struct proc *p;
+  int min_vrun = ~0; // minimum vruntime 초기화
+  int is_run = 0;
+  int vrun_1tick;
 
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == SLEEPING && p->chan == chan)
+
+  // RUNNABLE 프로세스가 있는지 확인하고 최소 vruntime 찾기
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if (p->state == RUNNABLE) {
+      is_run = 1;
+      // 최소 vruntime 업데이트
+      if (min_vrun > p->vruntime) {
+          min_vrun = p->vruntime;
+      }
+    }
+  }
+  
+  //sleeping 프로세스의 vruntime 업데이트 
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->state == SLEEPING && p->chan == chan) {
+
+      vrun_1tick = 1024/(weight_table[p->nice]);
+
+      if(is_run){
+        //다른 runnable 프로세스가 있는 경우 
+        p -> vruntime = min_vrun - vrun_1tick; // vruntime 업데이트 
+      }
+      else {
+        p->vruntime = 0; 
+      }
       p->state = RUNNABLE;
+    }
+  }    
 }
 
 // Wake up all processes sleeping on chan.
@@ -666,6 +779,7 @@ get_timeepoch()
 */
 
 
+//overview
 // - In this project, you need to  implement the following
 //     1. Impelment CFS on xv6 
 //         1. CFS must operate well so that runtime increases in accordance with priority
@@ -676,21 +790,15 @@ get_timeepoch()
 //     - We base our scoring on the output printed by ps()
 //         - even if CFS is well impelented, if ps fails to properly display the values, you may not receive a score
 
+
+//Proj2. Implement CFS on xv6
 // • Implement CFS on xv6
 // – Select process with minimum virtual runtime from runnable processes
 // – Update runtime/vruntime for each timer interrupt
 // – If task runs more than time slice, enforce a yield of the CPU
 // – Default nice value is 20, ranging from 0 to 39, and weight of nice 20 is
 // 1024
-// – Nice(0~39) to weight(Although there is formula, hard-code pre-defined array like Linux)
-// 𝑤𝑒𝑖𝑔ℎ𝑡 =
-// 1024
-// 1.25 𝑛𝑖𝑐𝑒−20 .
-// – Time slice calculation (our scheduling latency is 10ticks)
-// – vruntime calculation
-// 𝑣𝑟𝑢𝑛𝑡𝑖𝑚𝑒 += Δ𝑟𝑢𝑛𝑡𝑖𝑚𝑒 ×
-// 𝑤𝑒𝑖𝑔ℎ𝑡 𝑜𝑓 𝑛𝑖𝑐𝑒 20 (1024)
-// 𝑤𝑒𝑖𝑔ℎ𝑡 𝑜𝑓 𝑐𝑢𝑟𝑟𝑒𝑛𝑡 𝑝𝑟𝑜𝑐𝑒𝑠�
+
 
 
 // • How about newly forked process?
@@ -710,6 +818,8 @@ get_timeepoch()
 // process expires
 // – This is by default in xv6
 
+
+//Modify ps system call 
 // • To check if CFS is implemented properly, ps() should be
 // modified
 // • Sample output (mytest.c)
@@ -723,21 +833,16 @@ get_timeepoch()
 // whether the vruntime of the processes is similar
 
 
-// • Project 2 should be done based on your project 1 code
+
+
+//FAQs
 // • Please refer to the trap.c file for anything related to timer interrupts
-// • This project is not related to future projects
+
+
 // • You don't need to consider situations where runtime or vruntime is
 // too large (exceeding the range of int)
-// • The vruntime formula on page 8 is for conceptual explanation.
-// Please refer to page 11 for the actual implementation.
+
 // • You don't need to worry about anything related to exec()
 // • Do not worry about runtime at the time of wakeup
 
 // • Please implement CFS on xv6 and modify ps()
-// • Use the submit & check-submission binary file in
-// Ui Server
-// – make clean
-// – $ ~swe3004/bin/submit pa2 xv6-public
-// – you can submit several times, and the submission history
-// can be checked through check-submission
-// • Only the last submission will be graded

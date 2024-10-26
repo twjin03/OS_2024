@@ -74,16 +74,23 @@ trap(struct trapframe *tf)
     if(cpuid() == 0){
       acquire(&tickslock);
       ticks++;             // ticks 변수를 증가시키고, 특정 조건에서 yield를 호출해 프로세스를 교체 
+
+      struct proc *p = myproc();
+      if (p) {
+        int delta_runtime = 1;  // 각 tick이 1단위의 시간이라고 가정
+        int weight = weight_table[p->nice];
+        p->vruntime += delta_runtime * (weight_table[20] / weight);
+
+        // 현재 프로세스의 실행 시간과 타임 슬라이스 비교
+        if (p->runtime >= p->time_slice) {
+          yield(); // CPU를 양보
+        }
+
+      }
+
       wakeup(&ticks);
-      release(&tickslock);
-
-      // nice 값 20의 weight는 1024
-      int base_weight = 1024;
-      int weight = weight_table[myproc()->nice];
-      int delta_runtime = 1;  // 각 tick이 1단위의 시간이라고 가정
-
-    
-      myproc()->vruntime += delta_runtime * (base_weight / weight);
+      release(&tickslock);       
+           
     }
     lapiceoi();
     break;

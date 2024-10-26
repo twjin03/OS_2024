@@ -393,10 +393,10 @@ scheduler(void) // 시스템 스케줄러, 무한 루프를 돌며 실행 가능
 
     // 가장 작은 vruntime을 가진 프로세스가 발견되었다면 실행
     if(most_p) { // time_slice 계산
-      int time_slice = (10 * weight_table[most_p->nice]) / total_weight; // 기본 time slice 계산
+      most_p->time_slice = (10 * weight_table[most_p->nice]) / total_weight; // 기본 time slice 계산
       // – Time slice calculation (our scheduling latency is 10ticks)
       if ((10 * weight_table[most_p->nice]) % total_weight != 0) { // 올림을 위한 조건
-        time_slice++; // 정수 시간으로 올림
+        most_p->time_slice++; // 정수 시간으로 올림
       }
 
       // 스케줄링을 위한 프로세스 준비
@@ -763,15 +763,7 @@ get_timeepoch()
 // – If task runs more than time slice, enforce a yield of the CPU
 // – Default nice value is 20, ranging from 0 to 39, and weight of nice 20 is
 // 1024
-// – Nice(0~39) to weight(Although there is formula, hard-code pre-defined array like Linux)
-// 𝑤𝑒𝑖𝑔ℎ𝑡 =
-// 1024
-// 1.25 𝑛𝑖𝑐𝑒−20 .
-// – Time slice calculation (our scheduling latency is 10ticks)
-// – vruntime calculation
-// 𝑣𝑟𝑢𝑛𝑡𝑖𝑚𝑒 += Δ𝑟𝑢𝑛𝑡𝑖𝑚𝑒 ×
-// 𝑤𝑒𝑖𝑔ℎ𝑡 𝑜𝑓 𝑛𝑖𝑐𝑒 20 (1024)
-// 𝑤𝑒𝑖𝑔ℎ𝑡 𝑜𝑓 𝑐𝑢𝑟𝑟𝑒𝑛𝑡 𝑝𝑟𝑜𝑐𝑒𝑠�
+
 
 
 // • How about newly forked process?

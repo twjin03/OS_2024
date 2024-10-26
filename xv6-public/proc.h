@@ -54,12 +54,12 @@ struct proc {
 
   int weight; //(pa2) 프로세스 가중치 
 
-  uint runtime_d_weight; //(pa2) ???
+  uint runtime_d_weight; //(pa2)-ps output
   uint time_slice; //(pa2) ???
 
-  uint runtime; //(pa2) 총 런타임, 프로세스가 실제로 CPU를 사용한 시간
-  uint vruntime; //(pa2) 가상 런타임
-  uint total_tick; //(pa2) 프로세스가 실행된 총 tick 수, 이 값은 프로세스의 실행 빈도와 관련 있음 
+  uint runtime; //(pa2)-ps output 총 런타임, 프로세스가 실제로 CPU를 사용한 시간
+  uint vruntime; //(pa2)-ps output 가상 런타임
+  uint total_tick; //(pa2)-ps output 프로세스가 실행된 총 tick 수, 이 값은 프로세스의 실행 빈도와 관련 있음 
   
 
 };

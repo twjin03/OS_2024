@@ -2,6 +2,7 @@
 #include "stat.h"
 #include "user.h"
 
+//proj2
 void test_get_set_nice(void) {
   int pid = getpid();
   
@@ -53,3 +54,4 @@ int main(void) {
   
   exit();
 }
+

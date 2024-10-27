@@ -11,7 +11,6 @@
 
 
 
-
 // 시스템 interrupt 및 예외 처리 
 // syscall, timer interrrupt와 같은 주요 trap 
 

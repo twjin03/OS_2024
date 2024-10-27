@@ -63,10 +63,13 @@ struct proc {
   
   // int weight; //(pa2) 프로세스 가중치 scheduler()안에서 계산하여 사용
  
-  
 
 
 };
+
+
+
+extern int weight_table[40];
 
 // Process memory is laid out contiguously, low addresses first:
 //   text

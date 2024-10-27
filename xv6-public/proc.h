@@ -68,19 +68,8 @@ struct proc {
 };
 
 
-// nice value에 따른 weight hard coding 
-const int weight_table[40] = {
- /* 0  */     88761,     71755,     56483,     46273,     36291,
- /* 5  */     29154,     23254,     18705,     14949,     11916,
- /* 10 */      9548,      7620,      6100,      4904,      3906,
- /* 15 */      3121,      2501,      1991,      1586,      1277,
- /* 20 */      1024,       820,       655,       526,       423,
- /* 25 */       335,       272,       215,       172,       137,
- /* 30 */       110,        87,        70,        56,        45,
- /* 35 */        36,        29,        23,        18,        15,
-};
 
-
+extern int weight_table[40];
 
 // Process memory is laid out contiguously, low addresses first:
 //   text

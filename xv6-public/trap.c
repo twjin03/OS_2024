@@ -49,7 +49,7 @@ trap(struct trapframe *tf)
 {
   
   // !!!!!!!!테스트를 위한 임시 코드 !!!!!!!
-  if((ticks%10==0)&&(ticks>=100)&&myproc()) {
+  if((ticks%20==0)&&(ticks>=200)&&myproc()) {
     cprintf("\n\n");
     ps(0);
     cprintf("\n\n");

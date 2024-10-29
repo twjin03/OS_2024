@@ -109,19 +109,16 @@ allocproc(void) //새로운 프로세스 할당
 found:
   p->state = EMBRYO; //EMBRYO 상태로 변경(초기화)
   p->pid = nextpid++;
-
-  //set default nice value 20
   p->nice = 20;  // 기본 nice 값은 20으로 초기화
 
-  // int weight; //(pa2) 프로세스 가중치 
-
-  // 초기화 수행
   p->runtime_d_weight = 0; //(pa2)-ps output 
-  
   p->runtime = 0; //(pa2)-ps output 총 런타임, 프로세스가 실제로 CPU를 사용한 시간
   p->vruntime = 0; //(pa2)-ps output 가상 런타임
 
-  p->total_tick = 0; //(pa2)-ps output 프로세스가 실행된 총 tick 수, 이 값은 프로세스의 실행 빈도와 관련 있음 
+  p->time_slice = 0; 
+  
+
+  //p->total_tick = 0; //(pa2)-ps output 프로세스가 실행된 총 tick 수, 이 값은 프로세스의 실행 빈도와 관련 있음 
 
   release(&ptable.lock);
 

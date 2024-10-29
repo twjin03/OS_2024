@@ -109,19 +109,16 @@ allocproc(void) //새로운 프로세스 할당
 found:
   p->state = EMBRYO; //EMBRYO 상태로 변경(초기화)
   p->pid = nextpid++;
-
-  //set default nice value 20
   p->nice = 20;  // 기본 nice 값은 20으로 초기화
 
-  // int weight; //(pa2) 프로세스 가중치 
-
-  // 초기화 수행
   p->runtime_d_weight = 0; //(pa2)-ps output 
-  
   p->runtime = 0; //(pa2)-ps output 총 런타임, 프로세스가 실제로 CPU를 사용한 시간
   p->vruntime = 0; //(pa2)-ps output 가상 런타임
 
-  p->total_tick = 0; //(pa2)-ps output 프로세스가 실행된 총 tick 수, 이 값은 프로세스의 실행 빈도와 관련 있음 
+  p->time_slice = 0; 
+  
+
+  //p->total_tick = 0; //(pa2)-ps output 프로세스가 실행된 총 tick 수, 이 값은 프로세스의 실행 빈도와 관련 있음 
 
   release(&ptable.lock);
 
@@ -389,29 +386,29 @@ scheduler(void) // 시스템 스케줄러, 무한 루프를 돌며 실행 가능
       continue; // 다음 반복으로 넘어가서 다시 시도
     }
 
-    struct proc *most_p = 0; // 가장 작은 vruntime을 가진 프로세스 포인터 초기화
+    struct proc *min_vrun_process = 0; // 가장 작은 vruntime을 가진 프로세스 포인터 초기화
     uint min_vruntime = ~0; // 최대 값으로 초기화하여 최소 vruntime을 찾기 쉽게 함 ~0 == 0xFFFFFFFF
 
     // - Select process with minimum virtual runtime from runnable processes
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){ 
       if(p->state == RUNNABLE && p->vruntime < min_vruntime) { // 실행 가능한 프로세스에 대해
           min_vruntime = p->vruntime; // 최소 vruntime 업데이트
-          most_p = p; // 가장 작은 vruntime을 가진 프로세스 저장
+          min_vrun_process = p; // 가장 작은 vruntime을 가진 프로세스 저장
       }
     }
 
     // 가장 작은 vruntime을 가진 프로세스가 발견되었다면 실행
-    if(most_p) { // time_slice 계산
-      most_p->time_slice = (10 * weight_table[most_p->nice] + total_weight - 1) / total_weight;
+    if(min_vrun_process) { // time_slice 계산
+      min_vrun_process->time_slice = (10 * weight_table[min_vrun_process->nice] + total_weight - 1) / total_weight;
 
 
       // 스케줄링을 위한 프로세스 준비
-      c->proc = most_p; // 현재 CPU에서 실행할 프로세스를 most_p로 설정 
-      switchuvm(most_p); // 프로세스의 주소 공간으로 전환 
-      most_p->state = RUNNING; // 프로세스의 상태를 RUNNING으로 변경 
+      c->proc = min_vrun_process; 
+      switchuvm(min_vrun_process); // 프로세스의 주소 공간으로 전환 
+      min_vrun_process->state = RUNNING; // 프로세스의 상태를 RUNNING으로 변경 
 
       // 프로세스 실행
-      swtch(&(c->scheduler), most_p->context); // 스케줄러의 컨텍스트에서 most_p의 컨텍스트로 변경 
+      swtch(&(c->scheduler), min_vrun_process->context);  
       switchkvm(); // 커널 가상 메모리 공간으로 전환
 
       // 현재 CPU에서 실행 중인 프로세스를 초기화
@@ -587,7 +584,7 @@ wakeup1(void *chan)
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == SLEEPING && p->chan == chan) {
 
-      vrun_per_tick = 1024/(weight_table[p->nice]);
+      vrun_per_tick = (1000*1024)/(weight_table[p->nice]);
 
       if(is_run){
         //다른 runnable 프로세스가 있는 경우 
@@ -749,7 +746,7 @@ void ps(int pid){
         default: state = "???"; break; 
       }
 
-      cprintf("%s\t%d\t%s\t%d\t\t%d\t\t%d\t\t%d\n", p->name, p->pid, state, p->nice, p->runtime_d_weight, p->runtime*1000, p->vruntime*1000);
+      cprintf("%s\t%d\t%s\t%d\t\t%d\t\t%d\t\t%d\n", p->name, p->pid, state, p->nice, p->runtime_d_weight, p->runtime, p->vruntime);
       
     }
     

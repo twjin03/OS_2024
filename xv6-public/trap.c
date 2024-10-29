@@ -72,7 +72,7 @@ trap(struct trapframe *tf)
   if(myproc() && myproc()->state == RUNNING && tf->trapno == T_IRQ0+IRQ_TIMER){
     //runtime과 vruntime을 update
     struct proc *p = myproc();
-    int delta_runtime = 1; // 각 tick이 1단위의 시간이라고 가정
+    int delta_runtime = 1000; // 각 tick이 1000ms
 
 
     //runtime업데이트

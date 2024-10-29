@@ -57,40 +57,43 @@ trap(struct trapframe *tf)
     return;
   }
 
+  //(pa2) 조건문 추가 
+  if(myproc() && myproc()->state == RUNNING && tf->trapno == T_IRQ0+IRQ_TIMER){
+    //runtime과 vruntime을 update
+    struct proc *p = myproc();
+    int delta_runtime = 1; // 각 tick이 1단위의 시간이라고 가정
+
+
+    //runtime업데이트
+    p->runtime += delta_runtime;
+
+    //vruntime업데이트
+    int weight = weight_table[p->nice];
+    p->vruntime += delta_runtime * (weight_table[20] / weight);
+
+    //runtime_d_weight업데이트 
+    p->runtime_d_weight = p->runtime / weight_table[p->nice];
+
+
+    // 현재 프로세스의 실행 시간과 타임 슬라이스 비교
+    if (p->runtime >= p->time_slice) {
+      p->time_slice = 0;
+      yield(); // CPU를 양보
+    }
+}
+
+
   switch(tf->trapno){
-  case T_IRQ0 + IRQ_TIMER:  // timer interrupt인 경우 
+  case T_IRQ0 + IRQ_TIMER:
     if(cpuid() == 0){
       acquire(&tickslock);
-      ticks++;             // ticks 변수를 증가시키고, 특정 조건에서 yield를 호출해 프로세스를 교체 
-
-      //runtime과 vruntime을 update
-      struct proc *p = myproc();
-      if (p && p->state == RUNNING) {
-        int delta_runtime = 1;  // 각 tick이 1단위의 시간이라고 가정
-
-        //runtime업데이트
-        p->runtime += delta_runtime;
-
-        //vruntime업데이트
-        int weight = weight_table[p->nice];
-        p->vruntime += delta_runtime * (weight_table[20] / weight);
-
-        //runtime_d_weight업데이트 
-        p->runtime_d_weight = p->runtime / weight_table[p->nice];
-
-        // 현재 프로세스의 실행 시간과 타임 슬라이스 비교
-        if (p->runtime >= p->time_slice) {
-          yield(); // CPU를 양보
-        }
-
-      }
-
+      ticks++;
       wakeup(&ticks);
-      release(&tickslock);       
-           
+      release(&tickslock);
     }
     lapiceoi();
     break;
+  
   case T_IRQ0 + IRQ_IDE:
     ideintr();
     lapiceoi();

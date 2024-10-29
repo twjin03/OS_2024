@@ -747,8 +747,8 @@ void ps(int pid){
         case EMBRYO: state = "EMBRYO"; break;
         case SLEEPING: state = "SLEEPING"; break;
         case RUNNABLE: state = "RUNNABLE"; break;
-        case RUNNING: state = "RUNNING"; break;
-        case ZOMBIE: state = "ZOMBIE"; break;
+        case RUNNING: state = "RUNNING "; break;
+        case ZOMBIE: state = "ZOMBIE  "; break;
         default: state = "???"; break; 
       }
 

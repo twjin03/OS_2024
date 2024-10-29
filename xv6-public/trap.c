@@ -48,7 +48,7 @@ void
 trap(struct trapframe *tf)
 {
   
-  // !!!!!!!!테스트를 위한 임시 코드 !!!!!!!
+  //!!!!!!!!테스트를 위한 임시 코드 !!!!!!!
   if((ticks%20==0)&&(ticks>=200)&&myproc()) {
     cprintf("\n\n");
     ps(0);

@@ -384,26 +384,26 @@ scheduler(void) // 시스템 스케줄러, 무한 루프를 돌며 실행 가능
       }
     }
 
+    if(total_weight == 0) { // 모든 프로세스가 RUNNABLE 상태가 아닌 경우
+      release(&ptable.lock);
+      continue; // 다음 반복으로 넘어가서 다시 시도
+    }
+
     struct proc *most_p = 0; // 가장 작은 vruntime을 가진 프로세스 포인터 초기화
     uint min_vruntime = ~0; // 최대 값으로 초기화하여 최소 vruntime을 찾기 쉽게 함 ~0 == 0xFFFFFFFF
 
     // - Select process with minimum virtual runtime from runnable processes
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){ 
-      if(p->state == RUNNABLE) { // 실행 가능한 프로세스에 대해
-        if(p->vruntime < min_vruntime) { // 현재 프로세스의 vruntime이 최소값보다 작으면
+      if(p->state == RUNNABLE && p->vruntime < min_vruntime) { // 실행 가능한 프로세스에 대해
           min_vruntime = p->vruntime; // 최소 vruntime 업데이트
           most_p = p; // 가장 작은 vruntime을 가진 프로세스 저장
-        }
       }
     }
 
     // 가장 작은 vruntime을 가진 프로세스가 발견되었다면 실행
     if(most_p) { // time_slice 계산
-      most_p->time_slice = (10 * weight_table[most_p->nice]) / total_weight; // 기본 time slice 계산
-      // – Time slice calculation (our scheduling latency is 10ticks)
-      if ((10 * weight_table[most_p->nice]) % total_weight != 0) { // 올림을 위한 조건
-        most_p->time_slice++; // 정수 시간으로 올림
-      }
+      most_p->time_slice = (10 * weight_table[most_p->nice] + total_weight - 1) / total_weight;
+
 
       // 스케줄링을 위한 프로세스 준비
       c->proc = most_p; // 현재 CPU에서 실행할 프로세스를 most_p로 설정 
@@ -567,9 +567,9 @@ static void
 wakeup1(void *chan)
 {
   struct proc *p;
-  int min_vrun = ~0; // minimum vruntime 초기화
+  int min_vruntime = ~0; // minimum vruntime 초기화
   int is_run = 0;
-  int vrun_1tick;
+  int vrun_per_tick;
 
 
   // RUNNABLE 프로세스가 있는지 확인하고 최소 vruntime 찾기
@@ -577,8 +577,8 @@ wakeup1(void *chan)
     if (p->state == RUNNABLE) {
       is_run = 1;
       // 최소 vruntime 업데이트
-      if (min_vrun > p->vruntime) {
-          min_vrun = p->vruntime;
+      if (min_vruntime > p->vruntime) {
+          min_vruntime = p->vruntime;
       }
     }
   }
@@ -587,11 +587,11 @@ wakeup1(void *chan)
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == SLEEPING && p->chan == chan) {
 
-      vrun_1tick = 1024/(weight_table[p->nice]);
+      vrun_per_tick = 1024/(weight_table[p->nice]);
 
       if(is_run){
         //다른 runnable 프로세스가 있는 경우 
-        p -> vruntime = min_vrun - vrun_1tick; // vruntime 업데이트 
+        p -> vruntime = min_vruntime - vrun_per_tick; // vruntime 업데이트 
       }
       else {
         p->vruntime = 0; 
@@ -767,81 +767,3 @@ void ps(int pid){
  // no return value 
 
 }
-
-
-// pa2 
-// 예상 수정 사항 
-/*
-update_runtime()  // updates the actual runtime and virtual runtime 
-get_timeslice()  
-get_timeepoch()
-*/
-
-
-//overview
-// - In this project, you need to  implement the following
-//     1. Impelment CFS on xv6 
-//         1. CFS must operate well so that runtime increases in accordance with priority
-//         2. vruntime and time slice must be properly calculated 
-//         3. upon wake up, the defined rule must be strictly followed 
-//     2. Modify ps system call to output appropriate value 
-//         1. runtime/weight, runtime, vruntime, and total tick 
-//     - We base our scoring on the output printed by ps()
-//         - even if CFS is well impelented, if ps fails to properly display the values, you may not receive a score
-
-
-//Proj2. Implement CFS on xv6
-// • Implement CFS on xv6
-// – Select process with minimum virtual runtime from runnable processes
-// – Update runtime/vruntime for each timer interrupt
-// – If task runs more than time slice, enforce a yield of the CPU
-// – Default nice value is 20, ranging from 0 to 39, and weight of nice 20 is
-// 1024
-
-
-
-// • How about newly forked process?
-// – A process inherits the parent process’s runtime, vruntime, and nice value
-// • How about woken process?
-// – When a process is woken up, its virtual runtime gets
-//  (minimum vruntime of processes in the ready queue – vruntime(1tick) )
-// 𝑣𝑟𝑢𝑛𝑡𝑖𝑚𝑒 1𝑡𝑖𝑐𝑘 = 1𝑡𝑖𝑐𝑘 ×
-// 𝑤𝑒𝑖𝑔ℎ𝑡 𝑜𝑓 𝑛𝑖𝑐𝑒 20 (1024)
-// 𝑤𝑒𝑖𝑔ℎ𝑡 𝑜𝑓 𝑐𝑢𝑟𝑟𝑒𝑛𝑡 𝑝𝑟𝑜𝑐𝑒𝑠𝑠
-// (If there is no process in the RUNNABLE state when a process wakes up,
-// you can set the vruntime of the process to be woken up to “0”)
-// • DO NOT call sched() during a wake-up of a process
-// – Ensure that the time slice of the current process expires
-// • Woken-up process will have the minimum vruntime (by the formula above)
-// • But we do NOT want to schedule the woken-up process before the time slice of current
-// process expires
-// – This is by default in xv6
-
-
-//Modify ps system call 
-// • To check if CFS is implemented properly, ps() should be
-// modified
-// • Sample output (mytest.c)
-// – Print out the following information about the processes
-// – Use millitick unit (multiply the tick by 1000)
-// • runtime/weight, runtime, vruntime, total tick
-// – Do NOT use float/double types to present runtime and vruntime
-// – Kernel avoid floating point operation as much as possible
-// – There's no need for the output to match the sample exactly
-// – Check whether the runtime corresponds with the priority and
-// whether the vruntime of the processes is similar
-
-
-
-
-//FAQs
-// • Please refer to the trap.c file for anything related to timer interrupts
-
-
-// • You don't need to consider situations where runtime or vruntime is
-// too large (exceeding the range of int)
-
-// • You don't need to worry about anything related to exec()
-// • Do not worry about runtime at the time of wakeup
-
-// • Please implement CFS on xv6 and modify ps()

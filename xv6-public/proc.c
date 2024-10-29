@@ -399,7 +399,7 @@ scheduler(void) // 시스템 스케줄러, 무한 루프를 돌며 실행 가능
 
     // 가장 작은 vruntime을 가진 프로세스가 발견되었다면 실행
     if(min_vrun_process) { // time_slice 계산
-      min_vrun_process->time_slice = (10 * weight_table[min_vrun_process->nice] + total_weight - 1) / total_weight;
+      min_vrun_process->time_slice = (10* 1000 * weight_table[min_vrun_process->nice] + total_weight - 1) / total_weight;
 
 
       // 스케줄링을 위한 프로세스 준비

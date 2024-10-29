@@ -564,18 +564,25 @@ static void
 wakeup1(void *chan)
 {
   struct proc *p;
-  int min_vruntime = ~0; // minimum vruntime 초기화
+  int min_vrun = 0; // minimum vruntime 초기화
   int is_run = 0;
-  int vrun_per_tick;
+  int vrun_per_tick = 0;
 
 
   // RUNNABLE 프로세스가 있는지 확인하고 최소 vruntime 찾기
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
     if (p->state == RUNNABLE) {
       is_run = 1;
-      // 최소 vruntime 업데이트
-      if (min_vruntime > p->vruntime) {
-          min_vruntime = p->vruntime;
+      min_vrun = p->vruntime;
+    }
+  }
+
+  if(is_run == 1){
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state == RUNNABLE){
+        if (min_vrun > p->vruntime){
+          min_vrun = p->vruntime;
+        }
       }
     }
   }
@@ -585,14 +592,13 @@ wakeup1(void *chan)
     if(p->state == SLEEPING && p->chan == chan) {
 
       vrun_per_tick = (1000*1024)/(weight_table[p->nice]);
+      if(min_vrun < vrun_per_tick){
+        p->vruntime = 0;
+      }
+      else{
+        p->vruntime = min_vrun - vrun_per_tick;
+      }
 
-      if(is_run){
-        //다른 runnable 프로세스가 있는 경우 
-        p -> vruntime = min_vruntime - vrun_per_tick; // vruntime 업데이트 
-      }
-      else {
-        p->vruntime = 0; 
-      }
       p->state = RUNNABLE;
     }
   }    

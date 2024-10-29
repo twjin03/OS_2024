@@ -41,6 +41,8 @@ void test_ps(void) {
     printf(1, "Parent process information:\n");
     ps(getpid()); // print only parent process info
   }
+  
+  printf(1,"\n\n\n");
 }
 
 /*
@@ -57,10 +59,12 @@ int main(void) {
 }
 */
 
-/*
+
 int main ()
 {
-
+    printf(1, "\nBEFORE START Testing ps system call:\n");
+    test_ps();
+    
     int pid1 = fork();
     int a = 1;
     int range = 10000;
@@ -86,18 +90,24 @@ int main ()
         }
         printf(1,"ans: %d\n",a);
     }
-
+    printf(1, "\nBEFORE EXIT Testing ps system call:\n");
+    test_ps();
     exit();
 }
-*/
 
+
+
+
+/*
 int main ()
 {
     setnice(getpid(),5);
     int pid1 = fork();
     int a = 1;
     int range = 2000;
-
+    
+    printf(1, "\nBEFORE START Testing ps system call:\n");
+    test_ps();
     if(pid1>0){
         int pid2 = fork();
         if(pid2>0){
@@ -141,8 +151,14 @@ int main ()
         }
         printf(1,"%d - ans: %d\n",getpid(),a);
     }
+    printf(1, "\nBEFORE EXIT Testing ps system call:\n");
+    test_ps();
+    
+    
     
     exit();
 }
+*/
+
 
 

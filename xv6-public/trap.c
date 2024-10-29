@@ -70,7 +70,7 @@ trap(struct trapframe *tf)
 
   //(pa2) 조건문 추가 
   if(myproc() && myproc()->state == RUNNING && tf->trapno == T_IRQ0+IRQ_TIMER){
-    //runtime과 vruntime을 update
+    
     struct proc *p = myproc();
     int delta_runtime = 1000; // 각 tick이 1000ms
 
@@ -80,17 +80,17 @@ trap(struct trapframe *tf)
 
     //vruntime업데이트
     int weight = weight_table[p->nice];
-    p->vruntime += delta_runtime * (weight_table[20] / weight);
+    p->vruntime += ((delta_runtime * weight_table[20]) / weight);
 
     //runtime_d_weight업데이트 
     p->runtime_d_weight = p->runtime / weight_table[p->nice];
 
-
-    // 현재 프로세스의 실행 시간과 타임 슬라이스 비교
-    if (p->runtime >= p->time_slice) {
+    p->time_slice--;
+    if(p->time_slice<=0){
       p->time_slice = 0;
-      yield(); // CPU를 양보
+      yield();
     }
+
 }
 
 

@@ -49,7 +49,7 @@ trap(struct trapframe *tf)
 {
   
   // !!!!!!!!테스트를 위한 임시 코드 !!!!!!!
-  if((ticks%20==0)&&(ticks>=200)&&myproc()) {
+  if((ticks%10==0)&&(ticks>=100)&&myproc()) {
     cprintf("\n\n");
     ps(0);
     cprintf("\n\n");
@@ -85,12 +85,12 @@ trap(struct trapframe *tf)
     //runtime_d_weight업데이트 
     p->runtime_d_weight = p->runtime / weight_table[p->nice];
 
-
-    // 현재 프로세스의 실행 시간과 타임 슬라이스 비교
-    if (p->runtime >= p->time_slice) {
+    p->time_slice--;
+    if(p->time_slice<=0){
       p->time_slice = 0;
-      yield(); // CPU를 양보
+      yield();
     }
+
 }
 
 

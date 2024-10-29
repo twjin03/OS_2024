@@ -384,26 +384,26 @@ scheduler(void) // 시스템 스케줄러, 무한 루프를 돌며 실행 가능
       }
     }
 
+    if(total_weight == 0) { // 모든 프로세스가 RUNNABLE 상태가 아닌 경우
+      release(&ptable.lock);
+      continue; // 다음 반복으로 넘어가서 다시 시도
+    }
+
     struct proc *most_p = 0; // 가장 작은 vruntime을 가진 프로세스 포인터 초기화
     uint min_vruntime = ~0; // 최대 값으로 초기화하여 최소 vruntime을 찾기 쉽게 함 ~0 == 0xFFFFFFFF
 
     // - Select process with minimum virtual runtime from runnable processes
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){ 
-      if(p->state == RUNNABLE) { // 실행 가능한 프로세스에 대해
-        if(p->vruntime < min_vruntime) { // 현재 프로세스의 vruntime이 최소값보다 작으면
+      if(p->state == RUNNABLE && p->vruntime < min_vruntime) { // 실행 가능한 프로세스에 대해
           min_vruntime = p->vruntime; // 최소 vruntime 업데이트
           most_p = p; // 가장 작은 vruntime을 가진 프로세스 저장
-        }
       }
     }
 
     // 가장 작은 vruntime을 가진 프로세스가 발견되었다면 실행
     if(most_p) { // time_slice 계산
-      most_p->time_slice = (10 * weight_table[most_p->nice]) / total_weight; // 기본 time slice 계산
-      // – Time slice calculation (our scheduling latency is 10ticks)
-      if ((10 * weight_table[most_p->nice]) % total_weight != 0) { // 올림을 위한 조건
-        most_p->time_slice++; // 정수 시간으로 올림
-      }
+      most_p->time_slice = (10 * weight_table[most_p->nice] + total_weight - 1) / total_weight;
+
 
       // 스케줄링을 위한 프로세스 준비
       c->proc = most_p; // 현재 CPU에서 실행할 프로세스를 most_p로 설정 

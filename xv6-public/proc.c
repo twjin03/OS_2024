@@ -728,7 +728,8 @@ void ps(int pid){
   struct proc *p;
   acquire(&ptable.lock); //lock the process table
 
-  cprintf("name\tpid\tstate\t\tpriority\n");
+  cprintf("name\tpid\tstate\t\tpriority\t\truntime/weight\t\truntime\t\tvruntime\t\ttick %d\n", ticks*1000);
+  
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if (pid == 0 || p->pid == pid){
@@ -748,7 +749,7 @@ void ps(int pid){
         default: state = "???"; break; 
       }
 
-      cprintf("%s\t%d\t%s\t%d\n", p->name, p->pid, state, p->nice);
+      cprintf("%s\t%d\t%s\t%d\t\t%d\t\t%d\t\t%d\n", p->name, p->pid, state, p->nice, p->runtime_d_weight, p->runtime*1000, p->vruntime*1000);
       
     }
     

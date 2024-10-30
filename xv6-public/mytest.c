@@ -1,8 +1,7 @@
 #include "types.h"
 #include "stat.h"
 #include "user.h"
-
-
+/*
 void test_get_set_nice(void) {
   int pid = getpid();
   
@@ -26,6 +25,7 @@ void test_get_set_nice(void) {
   setnice(pid, 20);
   printf(1, "Restored nice value: %d\n", getnice(pid));
 }
+*/
 
 void test_ps(void) {
   int pid = fork();
@@ -96,8 +96,6 @@ int main ()
 }
 
 
-
-
 /*
 int main ()
 {
@@ -159,6 +157,7 @@ int main ()
     exit();
 }
 */
+
 
 
 

@@ -58,16 +58,10 @@ struct proc {
 
   uint runtime; //(pa2)-ps output 총 런타임, 프로세스가 실제로 CPU를 사용한 시간
   uint vruntime; //(pa2)-ps output 가상 런타임
-  //uint total_tick; //(pa2)-ps output 프로세스가 실행된 총 tick 수, 이 값은 프로세스의 실행 빈도와 관련 있음 = ticks
 
   uint time_slice; //(pa2) scheduler() 안에서 계산하여 저장
-  
-  // int weight; //(pa2) 프로세스 가중치 scheduler()안에서 계산하여 사용
  
-
-
 };
-
 
 
 extern int weight_table[40];
@@ -78,20 +72,3 @@ extern int weight_table[40];
 //   fixed-size stack
 //   expandable heap
 
-
-// pa1 수정 예상 사항 
-/*
-int pri  // priority if the process -> nice value, 이미 pa1에서 수정 완료 
-int weight // weight baseed on priority of process
-uint64 vruntime 
-uint64 aruntime // actual runtime 
-
-???
-uint64 runtick //running tick 
-uint64 timeslice // assigned time slice 
-uint64 vnice // high-level vruntime? overflow 발생한 횟수 
-???
-
-uint64 starttime  // time when the process wakes up and execute
-uint64 interval // the scheduler period for the process
-*/

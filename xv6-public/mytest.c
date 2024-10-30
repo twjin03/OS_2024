@@ -2,7 +2,6 @@
 #include "stat.h"
 #include "user.h"
 
-
 void test_get_set_nice(void) {
   int pid = getpid();
   
@@ -59,7 +58,7 @@ int main(void) {
 }
 */
 
-
+/*
 int main ()
 {
     printf(1, "\nBEFORE START Testing ps system call:\n");
@@ -94,9 +93,7 @@ int main ()
     test_ps();
     exit();
 }
-
-
-
+*/
 
 /*
 int main ()

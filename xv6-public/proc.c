@@ -565,19 +565,19 @@ wakeup1(void *chan)
 {
   struct proc *p;
   int min_vrun = 0; // minimum vruntime 초기화
-  int is_run = 0;
+  int is_runna = 0;
   int vrun_per_tick = 0;
 
 
   // RUNNABLE 프로세스가 있는지 확인하고 최소 vruntime 찾기
-  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) { 
     if (p->state == RUNNABLE) {
-      is_run = 1;
+      is_runna = 1;
       min_vrun = p->vruntime;
     }
   }
 
-  if(is_run == 1){
+  if(is_runna == 1){
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state == RUNNABLE){
         if (min_vrun > p->vruntime){
@@ -763,7 +763,6 @@ void ps(int pid){
 
 
   // prints out process(s)'s information 
-  // -> name, pid, state, priority(nice value) of each process
 
  // if pid == 0, print out all process's information
  // otherwise, print out corresponding process's information

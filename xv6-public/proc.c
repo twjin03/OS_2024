@@ -177,6 +177,8 @@ growproc(int n)
 // Create a new process copying p as the parent.
 // Sets up stack to return as if from system call.
 // Caller must set state of returned proc to RUNNABLE.
+
+//pa3) fork()는 부모와 완전히 동일한 메모리 콘텐츠를 갖는 자식을 생성 
 int
 fork(void)
 {
@@ -185,12 +187,12 @@ fork(void)
   struct proc *curproc = myproc();
 
   // Allocate process.
-  if((np = allocproc()) == 0){
+  if((np = allocproc()) == 0){ //pa3) allocproc() 함수를 통해 kernel stack을 할당
     return -1;
   }
 
   // Copy process state from proc.
-  if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
+  if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){ //pa3) copyuvm()을 통해 부모의 page table을 복사 
     kfree(np->kstack);
     np->kstack = 0;
     np->state = UNUSED;
@@ -531,4 +533,113 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+
+
+//pa3) mmap() system call on xv6
+
+uint mmap(uint addr, int lenth, int prot, int flags, int fd, int offset){
+// 1. addr is always page-aligned (0, 4096, 8192) 프로세스의 virtual memory address 중 어디가 mmap의 시작주소가 될지 결정
+// - MMAPBASE + addr is the start address of mapping  / mmap의 시작주소 계산
+// - MMAPBASE of each process’s virtual address is 0x40000000
+
+// 2. length is also a multiple of page size / mmap에 얼마만큼의 크기를 매핑할지 결정 
+// - MMAPBASE + addr + length is the end address of mapping
+
+// 3. prot can be PROT_READ or PROT_READ|PROT_WRITE / mmap된 메모리가 read 또는 write될 수 있는지 결정 
+// - prot should be match with file’s open flag
+
+// 4. flags can be given with the combinations / 2가지 플래그 있음 
+// 1) If MAP_ANONYMOUS is given, it is anonymous mapping / mapped memory는 0으로 채워짐
+// 2) If MAP_ANONYMOUS is not given, it is file mapping / file은 주어진 fd, 즉 file descripter를 통해 매핑되고 mapped memory는 파일의 내용물을 포함하게 됨
+
+// 당장 할당할지, 나중에 할당할지
+// 3) If MAP_POPULATE is given, allocate physical page & make
+// page table for whole mapping area.
+// 4) If MAP_POPULATE is not given, just record its mapping
+// area.
+// If page fault occurs to according area (access to mapping area’s virtual
+// address), allocate physical page & make page table to according page
+// 5) Other flags will not be used
+
+// 5. fd is given for file mappings, if not, it should be -1
+
+// 6. offset is given for file mappings, if not, it should be 0 / file의 어디에서부터 매핑을 시작할 지 결정하는 데 사용되는 값
+
+// Return
+// Succeed: return the start address of mapping area
+// Failed: return 0
+// - It's not anonymous, but when the fd is -1
+// - The protection of the file and the prot of the parameter are different
+// - The situation in which the mapping area is overlapped is not considered
+// - If additional errors occur, we will let you know by writing notification
+
+
+
+
+
+}
+
+// How file mmap() works 
+// 1) Private file mapping with MAP_POPULATE
+// • mmap(0, 8192, PROT_READ, MAP_POPULATE, fd, 4096)
+// – mmap 2pages
+
+// virtual 메모리에 메모리 할당 후 physical memory에서 두 개의 페이지를 받음 
+// 4096 오프셋을 적용한 파일 위치에서 두 개의 페이지를 읽어옴
+// 마지막으로 페이지 테이블을 통해 매핑 
+
+
+// 2) Private file mapping without MAP_POPULATE
+// • mmap(0, 8192, PROT_READ, 0, fd, 4096)
+// – mmap 2pages
+
+// 단순히 virtual memory에 메모리 할당하면 mmap() 종료 
+// 만약 프로세스가 mmapped region에 접근하면 page fault trap이 발생 
+// 접근한 영역과 대응되는 엔트리가 page table에 없기 때문
+
+// 이 경우 page fault handler가 physical memory를 할당하고 페이지 테이블을 활성화기킴 
+
+
+// 3) Private anonymous mapping with MAP_POPULATE
+// • mmap(0, 8192, PROT_READ,
+// MAP_POPULATE|MAP_ANONYMOUS, -1, 0)
+// – mmap 2pages
+
+// • Mostly same, but allocate page filled with 0
+
+// 메모리 영역을 파일로부터 읽어오는 것이 아닌 0으로 초기화 
+
+
+
+
+
+// 3. munmap() system call on xv6
+// - Unmaps corresponding mapping area
+// - Return value: 1(succeed), -1(failed)
+// 1. addr will be always given with the start address of mapping region, which is page
+// aligned
+// 2. munmap() should remove corresponding mmap_area structure
+// If there is no mmap_area of process starting with the address, return -1
+// 3. If physical page is allocated & page table is constructed, should free physical page
+// & page table
+// When freeing the physical page should fill with 1 and put it back to freelist
+// 4. If physical page is not allocated (page fault has not been occurred on that
+// address), just remove mmap_area structure.
+// 5. Notice) In one mmap_area, situation of some of pages are allocated and some
+// are not can happen.
+int munmap(uint addr){
+
+}
+
+// 4. freemem() system call on xv6
+// - syscall to return current number of free memory
+// pages
+// 1. When kernel frees (put page into free list),
+// freemem should be increase
+// 2. When kernel allocates (takes page from free list
+// and give it to process), freemem should decrease
+int freemem(){
+  
 }

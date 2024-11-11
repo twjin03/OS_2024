@@ -23,12 +23,15 @@ struct {
   struct run *freelist;
 } kmem;
 
+//pa3) 모든 physical memory가 부트 타입의 kmem의 freelist에 포함됨
+
 // Initialization happens in two phases.
 // 1. main() calls kinit1() while still using entrypgdir to place just
 // the pages mapped by entrypgdir on free list.
 // 2. main() calls kinit2() with the rest of the physical pages
 // after installing a full page table that maps them on all cores.
-void
+
+void //pa3) kinit1() sets up for lock-less allocation in the first 4MB
 kinit1(void *vstart, void *vend)
 {
   initlock(&kmem.lock, "kmem");
@@ -36,12 +39,14 @@ kinit1(void *vstart, void *vend)
   freerange(vstart, vend);
 }
 
-void
+void //pa3) kinit2() arranges for more memory (until PHYSTOP) to be allocatable (224MB)
 kinit2(void *vstart, void *vend)
 {
   freerange(vstart, vend);
   kmem.use_lock = 1;
 }
+
+//pa3) freerange() kfree() with page size unit
 
 void
 freerange(void *vstart, void *vend)
@@ -56,7 +61,8 @@ freerange(void *vstart, void *vend)
 // which normally should have been returned by a
 // call to kalloc().  (The exception is when
 // initializing the allocator; see kinit above.)
-void
+
+void //pa3) kfree() fills page with 1s, and put it into freelist (page pool)
 kfree(char *v)
 {
   struct run *r;

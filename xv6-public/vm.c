@@ -323,7 +323,7 @@ copyuvm(pde_t *pgdir, uint sz)
   if((d = setupkvm()) == 0)
     return 0;
   for(i = 0; i < sz; i += PGSIZE){
-    if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
+    if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0) //pa3) walkpgdir 함수를 사용해 부모 프로세스의 page table에서 i번째 대응되는 페이지의 page table entry 값을 가져오고, 부모의 페이지를 자식 프로세스의 새 페이지에 복사  
       panic("copyuvm: pte should exist");
     if(!(*pte & PTE_P))
       panic("copyuvm: page not present");
@@ -332,7 +332,7 @@ copyuvm(pde_t *pgdir, uint sz)
     if((mem = kalloc()) == 0)
       goto bad;
     memmove(mem, (char*)P2V(pa), PGSIZE);
-    if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) {
+    if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) { //pa3) mappages()를 통해 새 페이지에 대한 phytable entry를 자식 프로세스의 페이지 테이블에 set
       kfree(mem);
       goto bad;
     }

@@ -111,26 +111,3 @@ trap(struct trapframe *tf)
     exit();
 }
 
-
-//pa3
-// 2. Page Fault Handler on xv6
-
-// Page fault handler is for dealing with access on mapping region with physical
-// page & page table is not allocated
-// • Succeed: Physical pages and page table entries are created normally, and the process works
-// without any problems
-// • Failed: The process is terminated
-// 1. When an access occurs (read/write), catch according page fault (interrupt 14, T_PGFLT) in
-// traps.h
-// 2. In page fault handler, determine fault address by reading CR2 register(using rcr2()) & access
-// was read or write
-// read: tf->err&2 == 0 / write: tf->err&2 == 1
-// 3. Find according mapping region in mmap_area
-// If faulted address has no corresponding mmap_area, return -1
-// 4. If fault was write while mmap_area is write prohibited, then return -1
-// 5. For only one page according to faulted address
-// 1. Allocate new physical page
-// 2. Fill new page with 0
-// 3. If it is file mapping, read file into the physical page with offset
-// 4. If it is anonymous mapping, just left the page which is filled with 0s
-// 5. Make page table & fill it properly (if it was PROT_WRITE, PTE_W should be 1 in PTE value)

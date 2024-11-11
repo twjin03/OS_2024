@@ -7,7 +7,16 @@
 #include "proc.h"
 #include "spinlock.h"
 
+#include "file.h"
+#include "sleeplock.h" //??
+#include "fs.h" //??
+
 #define MMAPBASE 0x40000000 //pa3
+
+// • Manage all mmap areas created by each mmap() call in one mmap_area array.
+// • Maximum number of mmap_area array is 64.
+struct mmap_area marea[64];
+
 
 struct {
   struct spinlock lock;

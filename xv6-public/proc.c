@@ -547,9 +547,43 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
   uint start_addr = MMAPBASE + addr;
   uint end_addr = start_addr + length;
 
+  struct file *file = (flags & MAP_ANONYMOUS) ? 0 : curproc->ofile[fd]; // ??
+
+
   if (length <= 0 || length % PGSIZE != 0){
     return 0; // fail if length is invalid
   }
+
+  // - It's not anonymous, but when the fd is -1
+  if (!(flags & MAP_ANONYMOUS) && fd == -1){
+    return 0; 
+  }
+
+  // - The protection of the file and the prot of the parameter are different
+  if (file && ((prot & PROT_READ) && !(file->readable))){ // ?? 오류 원인 찾아야 함 
+    return 0; 
+  }
+
+  if (file && ((prot & PROT_WRITE) && !(file->writable))){ // ?? 오류 원인 찾아야 함 
+    return 0; 
+  }  
+
+  // 3) If MAP_POPULATE is given, allocate physical page & make page table for whole mapping area.
+  // 4) If MAP_POPULATE is not given, just record its mapping area.
+  if (flags & MAP_POPULATE){
+    for (uint va = start_addr; va < end_addr; va+= PGSIZE){
+      char *mem = kalloc(); 
+      if (mem == 0){
+        return 0; 
+      }
+      memset(mem, 0, PGSIZE);
+      mappages(curproc->pgdir, (void *)va, PGSIZE, V2P(mem), prot); //?? 
+      // mappages (1760) installs mappings into a page table for a range of virtual addresses to a corresponding range of physical addresses
+    }
+    
+  }
+  return start_addr;
+
 
 //= 1. addr is always page-aligned (0, 4096, 8192) 프로세스의 virtual memory address 중 어디가 mmap의 시작주소가 될지 결정
 //= - MMAPBASE + addr is the start address of mapping  / mmap의 시작주소 계산
@@ -581,8 +615,8 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
 // Return
 // Succeed: return the start address of mapping area
 // Failed: return 0
-// - It's not anonymous, but when the fd is -1
-// - The protection of the file and the prot of the parameter are different
+//= - It's not anonymous, but when the fd is -1
+//= - The protection of the file and the prot of the parameter are different
 // - The situation in which the mapping area is overlapped is not considered
 // - If additional errors occur, we will let you know by writing notification
 

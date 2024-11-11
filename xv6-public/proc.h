@@ -60,15 +60,17 @@ struct proc {
 
 
 
-//pa3) 
+//pa3
 struct mmap_area {
+  int isUsed; 
+
   struct file *f; // ??
   uint addr;
   int length;
   int offset;
   int prot;
   int flags;
-  struct proc *p // the process with this mmap_area
+  struct proc *p; // the process with this mmap_area 
 };
 
 // • Manage all mmap areas created by each mmap() call in one mmap_area array.

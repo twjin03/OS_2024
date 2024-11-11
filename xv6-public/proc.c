@@ -2,7 +2,7 @@
 #include "defs.h"
 #include "param.h"
 #include "memlayout.h"
-#include "mmu.h"  // PGSIZE 4096
+#include "mmu.h"  // PGSIZE 4096  PTE_U 0x004
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
@@ -15,7 +15,7 @@
 
 // • Manage all mmap areas created by each mmap() call in one mmap_area array.
 // • Maximum number of mmap_area array is 64.
-struct mmap_area marea[64];
+struct mmap_area marea[64] = {0};
 
 
 struct {
@@ -556,6 +556,9 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
   uint start_addr = MMAPBASE + addr;
   uint end_addr = start_addr + length;
 
+  // 4. flags can be given with the combinations / 2가지 플래그 있음 
+  // 1) If MAP_ANONYMOUS is given, it is anonymous mapping / mapped memory는 0으로 채워짐
+  // 2) If MAP_ANONYMOUS is not given, it is file mapping / file은 주어진 fd, 즉 file descripter를 통해 매핑되고 mapped memory는 파일의 내용물을 포함하게 됨
   struct file *file = (flags & MAP_ANONYMOUS) ? 0 : curproc->ofile[fd]; // ??
 
 
@@ -575,7 +578,27 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
 
   if (file && ((prot & PROT_WRITE) && !(file->writable))){ // ?? 오류 원인 찾아야 함 
     return 0; 
-  }  
+  } 
+
+  if (file){
+    file = filedup(file);
+  }
+
+  // find unused mmap_area
+  for (int i = 0; i < 64; i++){
+    if (marea[i].isUsed == 0){
+      marea[i].isUsed = 1; 
+      marea[i].f = file; // ?? 확인 필요 
+      marea[i].addr = start_addr; 
+      marea[i].length = length; 
+      marea[i].offset = offset; 
+      marea[i].prot = prot; 
+      marea[i].flags = flags;
+      marea[i].p = curproc; 
+      break;
+    }
+  }
+  
 
   // 3) If MAP_POPULATE is given, allocate physical page & make page table for whole mapping area.
   // 4) If MAP_POPULATE is not given, just record its mapping area.
@@ -586,8 +609,19 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
         return 0; 
       }
       memset(mem, 0, PGSIZE);
-      mappages(curproc->pgdir, (void *)va, PGSIZE, V2P(mem), prot); //?? 
+
+      int ifFail = mappages(curproc->pgdir, (void *)va, PGSIZE, V2P(mem), prot|PTE_U); //?? 
+      if (ifFail == -1){
+        kfree(mem);
+        return 0; 
+      }
       // mappages (1760) installs mappings into a page table for a range of virtual addresses to a corresponding range of physical addresses
+      // mappages 함수는 주어진 가상 주소(virtual address) 범위에 대해 페이지 테이블 항목(Page Table Entry, PTE)을 생성하여 가상 주소에서 시작하는 메모리 영역을 물리 주소(physical address)와 매핑
+
+      if (!(flags & MAP_ANONYMOUS)){
+        file->off = offset; 
+        fileread(file, mem, PGSIZE); // ??
+      }
     }
     
   }
@@ -604,9 +638,9 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
 // 3. prot can be PROT_READ or PROT_READ|PROT_WRITE / mmap된 메모리가 read 또는 write될 수 있는지 결정 
 // - prot should be match with file’s open flag
 
-// 4. flags can be given with the combinations / 2가지 플래그 있음 
-// 1) If MAP_ANONYMOUS is given, it is anonymous mapping / mapped memory는 0으로 채워짐
-// 2) If MAP_ANONYMOUS is not given, it is file mapping / file은 주어진 fd, 즉 file descripter를 통해 매핑되고 mapped memory는 파일의 내용물을 포함하게 됨
+//= 4. flags can be given with the combinations / 2가지 플래그 있음 
+//= 1) If MAP_ANONYMOUS is given, it is anonymous mapping / mapped memory는 0으로 채워짐
+//= 2) If MAP_ANONYMOUS is not given, it is file mapping / file은 주어진 fd, 즉 file descripter를 통해 매핑되고 mapped memory는 파일의 내용물을 포함하게 됨
 
 // 당장 할당할지, 나중에 할당할지
 // 3) If MAP_POPULATE is given, allocate physical page & make
@@ -621,8 +655,8 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
 
 // 6. offset is given for file mappings, if not, it should be 0 / file의 어디에서부터 매핑을 시작할 지 결정하는 데 사용되는 값
 
-// Return
-// Succeed: return the start address of mapping area
+//= Return
+//= Succeed: return the start address of mapping area
 // Failed: return 0
 //= - It's not anonymous, but when the fd is -1
 //= - The protection of the file and the prot of the parameter are different

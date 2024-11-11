@@ -17,6 +17,7 @@ extern char end[]; // first address after kernel loaded from ELF file
 int
 main(void)
 { //pa3) physical memory initialization 
+//These two functions(kinit1, kinit2) divide & manage physical memories with pages 실제 메모리를 페이지 단위로 나누고 관리  
   kinit1(end, P2V(4*1024*1024)); // phys page allocator
   kvmalloc();      // kernel page table
   mpinit();        // detect other processors

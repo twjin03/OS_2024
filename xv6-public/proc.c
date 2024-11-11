@@ -2,10 +2,12 @@
 #include "defs.h"
 #include "param.h"
 #include "memlayout.h"
-#include "mmu.h"
+#include "mmu.h"  // PGSIZE 4096
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+
+#define MMAPBASE 0x40000000 //pa3
 
 struct {
   struct spinlock lock;
@@ -539,13 +541,22 @@ procdump(void)
 
 //pa3) mmap() system call on xv6
 
-uint mmap(uint addr, int lenth, int prot, int flags, int fd, int offset){
-// 1. addr is always page-aligned (0, 4096, 8192) 프로세스의 virtual memory address 중 어디가 mmap의 시작주소가 될지 결정
-// - MMAPBASE + addr is the start address of mapping  / mmap의 시작주소 계산
-// - MMAPBASE of each process’s virtual address is 0x40000000
+uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
+  struct proc *curproc = myproc();
 
-// 2. length is also a multiple of page size / mmap에 얼마만큼의 크기를 매핑할지 결정 
-// - MMAPBASE + addr + length is the end address of mapping
+  uint start_addr = MMAPBASE + addr;
+  uint end_addr = start_addr + length;
+
+  if (length <= 0 || length % PGSIZE != 0){
+    return 0; // fail if length is invalid
+  }
+
+//= 1. addr is always page-aligned (0, 4096, 8192) 프로세스의 virtual memory address 중 어디가 mmap의 시작주소가 될지 결정
+//= - MMAPBASE + addr is the start address of mapping  / mmap의 시작주소 계산
+//= - MMAPBASE of each process’s virtual address is 0x40000000
+
+//= 2. length is also a multiple of page size / mmap에 얼마만큼의 크기를 매핑할지 결정 
+//= - MMAPBASE + addr + length is the end address of mapping
 
 // 3. prot can be PROT_READ or PROT_READ|PROT_WRITE / mmap된 메모리가 read 또는 write될 수 있는지 결정 
 // - prot should be match with file’s open flag
@@ -574,8 +585,6 @@ uint mmap(uint addr, int lenth, int prot, int flags, int fd, int offset){
 // - The protection of the file and the prot of the parameter are different
 // - The situation in which the mapping area is overlapped is not considered
 // - If additional errors occur, we will let you know by writing notification
-
-
 
 
 

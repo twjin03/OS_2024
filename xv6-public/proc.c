@@ -603,43 +603,39 @@ procdump(void)
 
 uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
   struct proc *curproc = myproc();
-
   uint start_addr = MMAPBASE + addr;
   uint end_addr = start_addr + length;
-
-  // 4. flags can be given with the combinations / 2가지 플래그 있음 
-  // 1) If MAP_ANONYMOUS is given, it is anonymous mapping / mapped memory는 0으로 채워짐
-  // 2) If MAP_ANONYMOUS is not given, it is file mapping / file은 주어진 fd, 즉 file descripter를 통해 매핑되고 mapped memory는 파일의 내용물을 포함하게 됨
-  struct file *file = (flags & MAP_ANONYMOUS) ? 0 : curproc->ofile[fd]; // ??
-
 
   if (length <= 0 || length % PGSIZE != 0){
     return 0; // fail if length is invalid
   }
 
+  // 1) If MAP_ANONYMOUS is given, it is anonymous mapping / mapped memory는 0으로 채워짐
+  // 2) If MAP_ANONYMOUS is not given, it is file mapping / file은 주어진 fd, 즉 file descripter를 통해 매핑되고 mapped memory는 파일의 내용물을 포함하게 됨
   // - It's not anonymous, but when the fd is -1
   if (!(flags & MAP_ANONYMOUS) && fd == -1){
     return 0; 
   }
 
-  // - The protection of the file and the prot of the parameter are different
-  if (file && ((prot & PROT_READ) && !(file->readable))){ // ?? 오류 원인 찾아야 함 
-    return 0; 
-  }
+  // NON_ANONYMOUS mapping을 위한 파일 
+  struct file *file = (flags & MAP_ANONYMOUS) ? 0 : curproc->ofile[fd]; // ??
 
-  if (file && ((prot & PROT_WRITE) && !(file->writable))){ // ?? 오류 원인 찾아야 함 
-    return 0; 
-  } 
-
-  if (file){
-    file = filedup(file);
+  // Check file protection compatibility
+  if (file) {
+    if ((prot & PROT_READ) && !(file->readable)) {
+      return 0; // fail if file is not readable
+    }
+    if ((prot & PROT_WRITE) && !(file->writable)) {
+      return 0; // fail if file is not writable
+    }
+    file = filedup(file); // duplicate file to keep it open
   }
 
   // find unused mmap_area & 할당 
   for (int i = 0; i < 64; i++){
     if (marea[i].isUsed == 0){
       marea[i].isUsed = 1; 
-      marea[i].f = file; // ?? 확인 필요 
+      marea[i].f = file; 
       marea[i].addr = start_addr; 
       marea[i].length = length; 
       marea[i].offset = offset; 
@@ -649,15 +645,13 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
       break;
     }
   }
-  
   // If MAP_POPULATE is not given, just record its mapping area. 
   // -> page fault 발생하면 allocate physical page & make page table to according page
 
-  // 3) If MAP_POPULATE is given, allocate physical page & make page table for whole mapping area.
-  // 4) If MAP_POPULATE is not given, just record its mapping area.
+  // If MAP_POPULATE is given, 
   if (flags & MAP_POPULATE){
     for (uint va = start_addr; va < end_addr; va+= PGSIZE){
-      char *mem = kalloc(); 
+      char *mem = kalloc(); // 1) allocate physical page
       if (!mem){ // kalloc() 실패 
         return 0; 
       }
@@ -668,15 +662,14 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
         fileread(file, mem, PGSIZE); // 실제 파일 값을 페이지 단위로 읽어 들여 mem 에 저장 
       }
 
-      // intmappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
-      // 페이지 디렉터리 포인터 pgdir, 시작 가상 주소 va, 매핑할 바이트 크기 size, 시작 물리 주소 pa, 페이지 권한 perm
-      int ifFail = mappages(curproc->pgdir, (void *)va, PGSIZE, V2P(mem), prot|PTE_U); // perm에 사용자 권한 추가
+      // 2) make page table for whole mapping area.
+      int ifFail = mappages(curproc->pgdir, (void *)va, PGSIZE, V2P(mem), prot|PTE_U); // perm에 사용자 권한 추가 
       if (ifFail == -1){ // mappages() 실패
         kfree(mem);
         return 0; 
       }
-      // mappages (1760) installs mappings into a page table for a range of virtual addresses to a corresponding range of physical addresses
-      // mappages 함수는 주어진 가상 주소(virtual address) 범위에 대해 페이지 테이블 항목(Page Table Entry, PTE)을 생성하여 가상 주소에서 시작하는 메모리 영역을 물리 주소(physical address)와 매핑
+      // mappages 함수는 주어진 가상 주소(virtual address) 범위에 대해 페이지 테이블 항목(Page Table Entry, PTE)을 생성하여 
+      // 가상 주소에서 시작하는 메모리 영역을 물리 주소(physical address)와 매핑
 
     }  
   }

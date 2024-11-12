@@ -241,30 +241,17 @@ fork(void)
 
           uint start_addr = marea[i].addr; 
           uint end_addr = start_addr + marea[i].length;
-
-          int isWrite = 0; 
-
           pte_t *pte; 
 
           for (uint va = start_addr; va < end_addr; va += PGSIZE){
             pte = walkpgdir(curproc->pgdir, (void*)va, 0); 
             if(!pte) continue; 
             if(!(*pte & PTE_P)) continue; 
-            if (pte && (*pte & PTE_P)){
-              char *mem = kalloc(); 
-              if (!mem){ // kalloc() 실패 
-                return 0; 
-              }
-              memset(mem, 0, PGSIZE);
-              memmove(mem, (void*)va, PGSIZE);
 
-              int perm = marea[i].prot | PTE_U;
-              if (isWrite) perm |= PTE_W;
-              int ifFail = mappages(curproc->pgdir, (void *)va, PGSIZE, V2P(mem), perm); // perm에 사용자 권한 추가
-              if (ifFail == -1){ // mappages() 실패
-                kfree(mem);
-                return 0; 
-              } 
+            int perm = marea[i].prot | PTE_U;
+            if (*pte & PTE_W) perm |= PTE_W;
+            if (mappages(np->pgdir, (void *)va, PGSIZE, PTE_ADDR(*pte), perm) == -1) {
+              panic("fork: mappages failed during mmap area copy");
             }
           }
           break;

@@ -691,24 +691,33 @@ int page_fault_handler(struct trapframe *tf){
   // 3. Find according mapping region in mmap_area
   struct mmap_area *mmap = 0; 
   for (int i = 0; i < 64; i++){
-    if (marea[i].isUsed == 1 && marea[i].p == curproc){ // ��� ������ Ȯ�� 
+    if (marea[i].isUsed == 1 && marea[i].p == curproc){
       if (marea[i].addr <= rounded_addr && rounded_addr < (marea[i].addr + marea[i].length)){
         mmap = &marea[i]; 
+        cprintf("Found mmap area: addr = 0x%x, length = 0x%x\n", mmap->addr, mmap->length);
         break; 
       }
     }
   }
   if (!mmap){ // If faulted address has no corresponding mmap_area, return -1
+    cprintf("Error: No valid mmap_area for address 0x%x\n", fault_addr);
+    curproc->killed = 1; // failed, terminate
     return -1; 
   }
 
   if (isWrite && !(mmap->prot & PROT_WRITE)){ // 4. If fault was write while mmap_area is write prohibited, then return -1
+    cprintf("Error: Write access violation at address 0x%x (no write permission)\n", fault_addr);
+    curproc->killed = 1; // failed, terminate
     return -1; 
   }
 
   // for only one page according to faulted adress
   char *mem = kalloc(); // allocate new physical page
-  if (!mem) return -1;
+  if (!mem) {
+    cprintf("Error: Failed to allocate memory for page at address 0x%x\n", fault_addr);
+    curproc->killed = 1; // failed, terminate
+    return -1;
+  }
   memset(mem, 0, PGSIZE); // fill new page with 0 
 
   // if it is file mapping,
@@ -725,6 +734,8 @@ int page_fault_handler(struct trapframe *tf){
 
   // make page table & fill it properly (if it was PROT_WRITE, PTE_W should be 1 in PTE value)
   if (mappages(curproc->pgdir, (void *)rounded_addr, PGSIZE, V2P(mem), perm) < 0) {
+    cprintf("mappings failed\n");
+    curproc->killed = 1; // failed, terminate
     return -1;
   }
   return 0;

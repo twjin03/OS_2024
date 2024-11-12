@@ -947,6 +947,6 @@ int munmap(uint addr){
   // freemem should be increase
   // 2. When kernel allocates (takes page from free list
   // and give it to process), freemem should decrease
-int freemem(){
+int freemem(void){
   return freememCount(); 
 }  

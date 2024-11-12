@@ -849,19 +849,19 @@ int munmap(uint addr){
 
   struct mmap_area *mmap = 0; 
   for (int i = 0; i < 64; i++){
-    if (marea[i].isUsed == 1 && (marea[i].addr == addr)){
-      mmap = &marea[i];
-      break;
+    if(marea[i].addr == addr){
+      if((marea[i].p = curproc)&&(marea[i].isUsed == 1)){
+        mmap = &marea[i];
+        break;
+      }
     }
   }
-
   if (!mmap){ // If there is no mmap_area of process starting with the address, return -1
     return -1; 
   }
 
   // 3. If physical page is allocated & page table is constructed, 
   // should free physical page & page table
-  
   uint start_addr = mmap->addr; 
   uint end_addr = start_addr + mmap->length;
   pte_t *pte; 
@@ -872,13 +872,14 @@ int munmap(uint addr){
     if(!(*pte & PTE_P)) continue; 
     if (pte && (*pte & PTE_P)){
       char *pa = P2V(PTE_ADDR(*pte));
-      // memset(physical_page, 1, PGSIZE); // ??
       kfree(pa); 
       *pte = 0; 
     }
   }
+  // If physical page is not allocated (page fault has not been occurred on that address), 
+  // just remove mmap_area structure.
   mmap->isUsed = 0; 
-  if(mmap->f) fileclose(mmap->f); // ??
+  mmap->f = 0;
   mmap->addr = 0; 
   mmap->length = 0; 
   mmap->offset = 0; 

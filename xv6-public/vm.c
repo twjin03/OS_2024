@@ -32,7 +32,7 @@ seginit(void)
 // Return the address of the PTE in page table pgdir
 // that corresponds to virtual address va.  If alloc!=0,
 // create any required page table pages.
-static pte_t *
+pte_t *
 walkpgdir(pde_t *pgdir, const void *va, int alloc)
 {
   pde_t *pde;
@@ -57,7 +57,7 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
 // be page-aligned.
-static int
+int
 mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
 {
   char *a, *last;
@@ -313,31 +313,31 @@ clearpteu(pde_t *pgdir, char *uva)
 // Given a parent process's page table, create a copy
 // of it for a child.
 pde_t*
-copyuvm(pde_t *pgdir, uint sz)
+copyuvm(pde_t *pgdir, uint sz) // 부모 프로세스의 페이지 디렉터리 pgdir과 할당된 메모리의 크기 sz를 인자로 받음. 반환값은 자식 프로세스의 페이지 디렉터리 포인터 
 {
-  pde_t *d;
-  pte_t *pte;
-  uint pa, i, flags;
-  char *mem;
+  pde_t *d; // 자식 프로세스의 페이지 디렉터리 포인터 
+  pte_t *pte; // page table entry
+  uint pa, i, flags; // pa는 페이지의 physical address, i는 페이지 크기 단위의 인덱스, flags는 pte의 플래그 
+  char *mem; // 새 페이지의 virtual memory 
 
-  if((d = setupkvm()) == 0)
+  if((d = setupkvm()) == 0) // 새로운 커널 가상 메모리 매핑 초기화, 성공 시 자식 페이지 디렉터리 d를 반환 
     return 0;
-  for(i = 0; i < sz; i += PGSIZE){
-    if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
-      panic("copyuvm: pte should exist");
+  for(i = 0; i < sz; i += PGSIZE){ // 메모리의 크기 sz만큼 페이지 크기(PGSIZE) 단위로 순회하며 각 페이지를 복사 
+    if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0) //pa3) walkpgdir 함수를 사용해 부모 프로세스의 page table에서 i번째 대응되는 페이지의 page table entry 값을 가져오고, 
     if(!(*pte & PTE_P))
-      panic("copyuvm: page not present");
-    pa = PTE_ADDR(*pte);
-    flags = PTE_FLAGS(*pte);
+      panic("copyuvm: page not present"); // 페이지가 존재하지 않으면 panic
+    pa = PTE_ADDR(*pte); // 부모의 pte에서 physical memory 추출 
+    flags = PTE_FLAGS(*pte); // 플래그 비트 추출 
     if((mem = kalloc()) == 0)
       goto bad;
-    memmove(mem, (char*)P2V(pa), PGSIZE);
-    if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) {
+    memmove(mem, (char*)P2V(pa), PGSIZE); // 부모의 페이지를 자식 프로세스의 새 페이지(mem)에 복사 P2V는 physical address를 virtual address로 변환
+      panic("copyuvm: pte should exist"); // 해당 pte가 존재하지 않으면 panic 호출하여 예외 발생시킴 
+    if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) { //pa3) mappages()를 통해 새 페이지에 대한 pte를 자식 프로세스의 페이지 테이블에 set / 자식 페이지 테이블에 새 페이지 매핑
       kfree(mem);
       goto bad;
     }
-  }
-  return d;
+  } // 모든 페이지를 성공적으로 복사했으면,
+  return d; // 자식 프로세스의 페이지 디렉터리 포인터 d 반환 
 
 bad:
   freevm(d);

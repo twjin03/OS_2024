@@ -2,10 +2,35 @@
 #include "defs.h"
 #include "param.h"
 #include "memlayout.h"
-#include "mmu.h"
+#include "mmu.h"  // PGSIZE 4096  PTE_U 0x004
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+
+#include "sleeplock.h" //??
+#include "fs.h" //??
+#include "file.h"
+
+
+#define MMAPBASE 0x40000000 //pa3
+
+// • Manage all mmap areas created by each mmap() call in one mmap_area array.
+// • Maximum number of mmap_area array is 64.
+struct mmap_area marea[64];
+
+void init_marea(int i){
+  marea[i].isUsed = 0; 
+  marea[i].f = 0; 
+  marea[i].addr = 0; 
+  marea[i].length = 0; 
+  marea[i].offset = 0; 
+  marea[i].prot = 0; 
+  marea[i].flags = 0;
+  marea[i].p = 0; 
+}
+
+extern uint freememCount(void);
+
 
 struct {
   struct spinlock lock;
@@ -120,6 +145,10 @@ found:
 void
 userinit(void)
 {
+
+  for (int i = 0; i < 64; i++){
+    init_marea(i);
+  }
   struct proc *p;
   extern char _binary_initcode_start[], _binary_initcode_size[];
 
@@ -177,6 +206,9 @@ growproc(int n)
 // Create a new process copying p as the parent.
 // Sets up stack to return as if from system call.
 // Caller must set state of returned proc to RUNNABLE.
+
+//pa3) fork()는 부모와 완전히 동일한 메모리 콘텐츠를 갖는 자식을 생성 
+
 int
 fork(void)
 {
@@ -185,12 +217,12 @@ fork(void)
   struct proc *curproc = myproc();
 
   // Allocate process.
-  if((np = allocproc()) == 0){
+  if((np = allocproc()) == 0){ //pa3) allocproc() 함수를 통해 kernel stack을 할당
     return -1;
   }
 
   // Copy process state from proc.
-  if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
+  if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){ //pa3) copyuvm()을 통해 부모의 page table을 복사 
     kfree(np->kstack);
     np->kstack = 0;
     np->state = UNUSED;
@@ -210,6 +242,40 @@ fork(void)
 
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
+  for (int i = 0; i < 64 ; i++){
+    if((marea[i].isUsed == 1) && (marea[i].p == curproc)){
+      for (int t = 0; t < 64; t++){
+        if(marea[t].isUsed == 0){
+          marea[t].isUsed = marea[i].isUsed;
+          marea[t].f = marea[i].f; 
+          marea[t].addr = marea[i].addr;
+          marea[t].length = marea[i].length; 
+          marea[t].offset = marea[i].offset; 
+          marea[t].prot = marea[i].prot; 
+          marea[t].flags = marea[i].flags;
+          marea[t].p = np;
+
+          uint start_addr = marea[i].addr; 
+          uint end_addr = start_addr + marea[i].length;
+          pte_t *pte; 
+
+          for (uint va = start_addr; va < end_addr; va += PGSIZE){
+            pte = walkpgdir(curproc->pgdir, (void*)va, 0); 
+            if(!pte) continue; 
+            if(!(*pte & PTE_P)) continue; 
+
+            int perm = marea[i].prot | PTE_U;
+            if (*pte & PTE_W) perm |= PTE_W;
+            if (mappages(np->pgdir, (void *)va, PGSIZE, PTE_ADDR(*pte), perm) == -1) {
+              panic("fork: mappages failed during mmap area copy");
+            }
+          }
+          break;
+        }
+      }
+    }
+  }
+
   pid = np->pid;
 
   acquire(&ptable.lock);
@@ -220,6 +286,7 @@ fork(void)
 
   return pid;
 }
+
 
 // Exit the current process.  Does not return.
 // An exited process remains in the zombie state
@@ -532,3 +599,306 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+
+
+//pa3) mmap() system call on xv6
+uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
+  struct proc *curproc = myproc();
+  uint start_addr = MMAPBASE + addr;
+  uint end_addr = start_addr + length;
+
+  if (length <= 0 || length % PGSIZE != 0){
+    return 0; // fail if length is invalid
+  }
+
+  // 1) If MAP_ANONYMOUS is given, it is anonymous mapping / mapped memory는 0으로 채워짐
+  // 2) If MAP_ANONYMOUS is not given, it is file mapping / file은 주어진 fd, 즉 file descripter를 통해 매핑되고 mapped memory는 파일의 내용물을 포함하게 됨
+  // - It's not anonymous, but when the fd is -1
+  if (!(flags & MAP_ANONYMOUS) && fd == -1){
+    return 0; 
+  }
+
+  // NON_ANONYMOUS mapping을 위한 파일 
+  struct file *file = (flags & MAP_ANONYMOUS) ? 0 : curproc->ofile[fd]; // ??
+
+  // Check file protection compatibility
+  if (file) {
+    if ((prot & PROT_READ) && !(file->readable)) {
+      return 0; // fail if file is not readable
+    }
+    if ((prot & PROT_WRITE) && !(file->writable)) {
+      return 0; // fail if file is not writable
+    }
+    file = filedup(file); // duplicate file to keep it open
+  }
+
+  // find unused mmap_area & 할당 
+  for (int i = 0; i < 64; i++){
+    if (marea[i].isUsed == 0){
+      marea[i].isUsed = 1; 
+      marea[i].f = file; 
+      marea[i].addr = start_addr; 
+      marea[i].length = length; 
+      marea[i].offset = offset; 
+      marea[i].prot = prot; 
+      marea[i].flags = flags;
+      marea[i].p = curproc; 
+      break;
+    }
+  }
+  // If MAP_POPULATE is not given, just record its mapping area. 
+  // -> page fault 발생하면 allocate physical page & make page table to according page
+
+  // If MAP_POPULATE is given, 
+  if (flags & MAP_POPULATE){
+    for (uint va = start_addr; va < end_addr; va+= PGSIZE){
+      char *mem = kalloc(); // 1) allocate physical page
+      if (!mem){ // kalloc() 실패 
+        return 0; 
+      }
+      memset(mem, 0, PGSIZE);
+
+      if (!(flags & MAP_ANONYMOUS)){
+        file->off = offset; 
+        fileread(file, mem, PGSIZE); // 실제 파일 값을 페이지 단위로 읽어 들여 mem 에 저장 
+      }
+
+      // 2) make page table for whole mapping area.
+      int ifFail = mappages(curproc->pgdir, (void *)va, PGSIZE, V2P(mem), prot|PTE_U); // perm에 사용자 권한 추가 
+      if (ifFail == -1){ // mappages() 실패
+        return 0; 
+      }
+      // mappages 함수는 주어진 가상 주소(virtual address) 범위에 대해 페이지 테이블 항목(Page Table Entry, PTE)을 생성하여 
+      // 가상 주소에서 시작하는 메모리 영역을 물리 주소(physical address)와 매핑
+
+    }  
+  }
+  return start_addr;
+
+
+//= 1. addr is always page-aligned (0, 4096, 8192) 프로세스의 virtual memory address 중 어디가 mmap의 시작주소가 될지 결정
+//= - MMAPBASE + addr is the start address of mapping  / mmap의 시작주소 계산
+//= - MMAPBASE of each process’s virtual address is 0x40000000
+
+//= 2. length is also a multiple of page size / mmap에 얼마만큼의 크기를 매핑할지 결정 
+//= - MMAPBASE + addr + length is the end address of mapping
+
+// 3. prot can be PROT_READ or PROT_READ|PROT_WRITE / mmap된 메모리가 read 또는 write될 수 있는지 결정 
+// - prot should be match with file’s open flag
+
+//= 4. flags can be given with the combinations / 2가지 플래그 있음 
+//= 1) If MAP_ANONYMOUS is given, it is anonymous mapping / mapped memory는 0으로 채워짐
+//= 2) If MAP_ANONYMOUS is not given, it is file mapping / file은 주어진 fd, 즉 file descripter를 통해 매핑되고 mapped memory는 파일의 내용물을 포함하게 됨
+
+// 당장 할당할지, 나중에 할당할지
+// 3) If MAP_POPULATE is given, allocate physical page & make
+// page table for whole mapping area.
+// 4) If MAP_POPULATE is not given, just record its mapping
+// area.
+// If page fault occurs to according area (access to mapping area’s virtual
+// address), allocate physical page & make page table to according page
+// 5) Other flags will not be used
+
+// 5. fd is given for file mappings, if not, it should be -1
+
+// 6. offset is given for file mappings, if not, it should be 0 / file의 어디에서부터 매핑을 시작할 지 결정하는 데 사용되는 값
+
+//= Return
+//= Succeed: return the start address of mapping area
+// Failed: return 0
+//= - It's not anonymous, but when the fd is -1
+//= - The protection of the file and the prot of the parameter are different
+// - The situation in which the mapping area is overlapped is not considered
+// - If additional errors occur, we will let you know by writing notification
+
+
+
+}
+
+// How file mmap() works 
+// 1) Private file mapping with MAP_POPULATE
+// • mmap(0, 8192, PROT_READ, MAP_POPULATE, fd, 4096)
+// – mmap 2pages
+
+// virtual 메모리에 메모리 할당 후 physical memory에서 두 개의 페이지를 받음 
+// 4096 오프셋을 적용한 파일 위치에서 두 개의 페이지를 읽어옴
+// 마지막으로 페이지 테이블을 통해 매핑 
+
+
+// 2) Private file mapping without MAP_POPULATE
+// • mmap(0, 8192, PROT_READ, 0, fd, 4096)
+// – mmap 2pages
+
+// 단순히 virtual memory에 메모리 할당하면 mmap() 종료 
+// 만약 프로세스가 mmapped region에 접근하면 page fault trap이 발생 
+// 접근한 영역과 대응되는 엔트리가 page table에 없기 때문
+
+// 이 경우 page fault handler가 physical memory를 할당하고 페이지 테이블을 활성화기킴 
+
+
+// 3) Private anonymous mapping with MAP_POPULATE
+// • mmap(0, 8192, PROT_READ,
+// MAP_POPULATE|MAP_ANONYMOUS, -1, 0)
+// – mmap 2pages
+
+// • Mostly same, but allocate page filled with 0
+
+// 메모리 영역을 파일로부터 읽어오는 것이 아닌 0으로 초기화 
+
+
+
+//pa3
+// 2. Page Fault Handler on xv6
+
+// Page fault handler is for dealing with access on mapping region with physical page & page table is not allocated
+// • Succeed: Physical pages and page table entries are created normally, and the process works
+// without any problems
+// • Failed: The process is terminated
+
+int page_fault_handler(struct trapframe *tf){
+  struct proc *curproc = myproc();
+
+  // 2. In page fault handler, determine fault address by reading CR2 register(using rcr2()) 
+  // & access was read or write
+  uint fault_addr = rcr2(); // CR2 레지스터에서 페이지 폴트 주소 읽기
+
+  uint rounded_addr = PGROUNDDOWN(fault_addr); // ?? 페이지 경계로 주소 정렬
+
+  int isWrite = (tf->err&2) ? 1 : 0; 
+  // write: tf->err&2 == 1 / read: tf->err&2 == 0  
+
+
+  // 3. Find according mapping region in mmap_area
+  struct mmap_area *mmap = 0; // mmap_area 구조체 포인터 초기화
+  for (int i = 0; i < 64; i++){
+    if (marea[i].isUsed == 1 && marea[i].p == curproc){ // 사용 중인지 확인 
+      if (marea[i].addr <= rounded_addr && rounded_addr < (marea[i].addr + marea[i].length)){
+        mmap = &marea[i]; 
+        break; 
+      }
+    }
+  }
+
+  if (!mmap){ // If faulted address has no corresponding mmap_area, return -1
+    return -1; 
+  }
+
+  if (isWrite && !(mmap->prot & PROT_WRITE)){ // 4. If fault was write while mmap_area is write prohibited, then return -1
+    return -1; 
+  }
+
+  // cprintf('\npage fault ... %x\n', rounded_addr);  // ??
+
+  char *mem = kalloc(); // allocate new physical page
+  if (!mem) return -1;
+  memset(mem, 0, PGSIZE); // fill new page with 0 
+
+  if (!(mmap->flags & MAP_ANONYMOUS)) { // read file into physical page with offset
+    struct file *file = mmap->f;
+    file->off = mmap->offset;
+    fileread(file, mem, PGSIZE);
+    file->off += PGSIZE; // Move file offset
+  }
+
+  int perm = mmap->prot | PTE_U;
+  if (isWrite) perm = perm|PTE_W;
+
+  // make page table & fill it properly (if it was PROT_WRITE, PTE_W should be 1 in PTE value)
+  if (mappages(curproc->pgdir, (void *)rounded_addr, PGSIZE, V2P(mem), perm) < 0) {
+    return -1;
+  }
+  return 0;
+}
+// 1. When an access occurs (read/write), catch according page fault (interrupt 14, T_PGFLT) in
+// traps.h
+
+// 2. In page fault handler, determine fault address by reading CR2 register(using rcr2()) & access
+// was read or write
+// read: tf->err&2 == 0 / write: tf->err&2 == 1
+
+// 3. Find according mapping region in mmap_area
+// If faulted address has no corresponding mmap_area, return -1
+
+// 4. If fault was write while mmap_area is write prohibited, then return -1
+
+// 5. For only one page according to faulted address
+  // 1. Allocate new physical page
+  // 2. Fill new page with 0
+  // 3. If it is file mapping, read file into the physical page with offset
+  // 4. If it is anonymous mapping, just left the page which is filled with 0s
+  // 5. Make page table & fill it properly (if it was PROT_WRITE, PTE_W should be 1 in PTE value) // ??
+
+
+// 3. munmap() system call on xv6
+// - Unmaps corresponding mapping area
+// - Return value: 1(succeed), -1(failed)
+
+  // 1. addr will be always given with the start address of mapping region, which is page
+  // aligned
+  // 2. munmap() should remove corresponding mmap_area structure
+  // If there is no mmap_area of process starting with the address, return -1
+  // 3. If physical page is allocated & page table is constructed, should free physical page
+  // & page table
+  // When freeing the physical page should fill with 1 and put it back to freelist
+  // 4. If physical page is not allocated (page fault has not been occurred on that
+  // address), just remove mmap_area structure.
+  // 5. Notice) In one mmap_area, situation of some of pages are allocated and some
+  // are not can happen.
+int munmap(uint addr){
+  struct proc *curproc = myproc();
+
+  struct mmap_area *mmap = 0; 
+  for (int i = 0; i < 64; i++){
+    if(marea[i].addr == addr){
+      if((marea[i].p = curproc)&&(marea[i].isUsed == 1)){
+        mmap = &marea[i];
+        break;
+      }
+    }
+  }
+  if (!mmap){ // If there is no mmap_area of process starting with the address, return -1
+    return -1; 
+  }
+
+  // 3. If physical page is allocated & page table is constructed, 
+  // should free physical page & page table
+  uint start_addr = mmap->addr; 
+  uint end_addr = start_addr + mmap->length;
+  pte_t *pte; 
+
+  for (uint va = start_addr; va < end_addr; va += PGSIZE){
+    pte = walkpgdir(curproc->pgdir, (void*)va, 0); 
+    if(!pte) continue; 
+    if(!(*pte & PTE_P)) continue; 
+    if (pte && (*pte & PTE_P)){
+      char *pa = P2V(PTE_ADDR(*pte));
+      kfree(pa); 
+      *pte = 0; 
+    }
+  }
+  // If physical page is not allocated (page fault has not been occurred on that address), 
+  // just remove mmap_area structure.
+  mmap->isUsed = 0; 
+  mmap->f = 0;
+  mmap->addr = 0; 
+  mmap->length = 0; 
+  mmap->offset = 0; 
+  mmap->prot = 0; 
+  mmap->flags = 0; 
+  mmap->p = 0; 
+
+  return 1; 
+}
+
+
+// 4. freemem() system call on xv6
+// - syscall to return current number of free memory
+// pages
+  // 1. When kernel frees (put page into free list),
+  // freemem should be increase
+  // 2. When kernel allocates (takes page from free list
+  // and give it to process), freemem should decrease
+int freemem(void){
+  return freememCount(); 
+}  

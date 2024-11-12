@@ -725,7 +725,6 @@ int page_fault_handler(struct trapframe *tf){
 
 
   // 3. Find according mapping region in mmap_area
-  int i = 0; 
   struct mmap_area *mmap = 0; // mmap_area 구조체 포인터 초기화
   for (int i = 0; i < 64; i++){
     if (marea[i].isUsed == 1 && marea[i].p == curproc){ // 사용 중인지 확인 
@@ -733,7 +732,6 @@ int page_fault_handler(struct trapframe *tf){
         mmap = &marea[i]; 
         break; 
       }
-
     }
   }
 
@@ -745,37 +743,54 @@ int page_fault_handler(struct trapframe *tf){
     return -1; 
   }
 
-  // 5. For only one page according to faulted address
-  for (rounded_addr; )
-    // 1. Allocate new physical page
-  char *mem = kalloc(); 
-  if(!mem){ // kalloc() 실패
-    return -1; 
-  }
-    // 2. Fill new page with 0
-  memset(mem, 0, PGSIZE); 
+  cprintf('\npage fault ... %x\n', rounded_addr); 
 
-  if (!(mmap->flags & MAP_ANONYMOUS)){
-    struct file *file = mmap->f; 
-    file->off = mmap->offset; 
-    fileread(file, mem, PGSIZE); // 실제 파일 값을 페이지 단위로 읽어 들여 mem 에 저장 
+  uint start_addr = mmap->addr; 
+  uint end_addr = start_addr + mmap->length; 
 
-    int perm = mmap->prot|PTE_U; 
-    if (isWrite){
-      perm = perm|PTE_W;
+  for (uint va = start_addr; va < end_addr; va+= PGSIZE){
+    if ((va <= rounded_addr) && (rounded_addr < va + PGSIZE)){
+      char *mem = kalloc(); 
+      if(!mem){
+        return 0; // kalloc() 실패 
+      }
+      memset(mem, 0, PGSIZE);
+
+      if (!(mmap->flags & MAP_ANONYMOUS)){
+        struct file *file = mmap->f; 
+        fileread(file, mem, PGSIZE); 
+
+        int perm = mmap->prot|PTE_U; 
+        if (isWrite){
+          perm = perm|PTE_W;
+        }
+        int ifFail = mappages(curproc->pgdir, (void *)rounded_addr, PGSIZE, V2P(mem), perm); 
+        if (ifFail == -1){ // mappages() 실패
+          kfree(mem);
+          return 0; 
+        }
+
+        file->off += PGSIZE;
+      }
+
+      else{
+        int perm = mmap->prot|PTE_U; 
+        if (isWrite){
+          perm = perm|PTE_W;
+        }
+        int ifFail = mappages(curproc->pgdir, (void *)rounded_addr, PGSIZE, V2P(mem), perm); 
+        if (ifFail == -1){ // mappages() 실패
+          kfree(mem);
+          return 0; 
+        }
+      }
     }
 
-    // intmappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
-    // 페이지 디렉터리 포인터 pgdir, 시작 가상 주소 va, 매핑할 바이트 크기 size, 시작 물리 주소 pa, 페이지 권한 perm
-    int ifFail = mappages(curproc->pgdir, (void *)rounded_addr, PGSIZE, V2P(mem), perm); 
-    if (ifFail == -1){ // mappages() 실패
-      kfree(mem);
-      return 0; 
-    }
-
-    file->off += PGSIZE;
+    return 0; 
 
   }
+
+
 
 
 

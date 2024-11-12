@@ -225,6 +225,44 @@ fork(void)
 
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
+  for (int i = 0; i < 64 ; i++){
+    if((marea[i].isUsed == 1) && (marea[i].p == curproc)){
+      for (int t = 0; t < 64; t++){
+        if(marea[t].isUsed == 0){
+          marea[t].isUsed = marea[i].isUsed;
+          marea[t].f = marea[i].f; 
+          marea[t].addr = marea[i].addr;
+          marea[t].length = marea[i].length; 
+          marea[t].offset = marea[i].offset; 
+          marea[t].prot = marea[i].prot; 
+          marea[t].flags = marea[i].flags;
+          marea[t].p = np;
+
+          uint start_addr = marea[i].addr; 
+          uint end_addr = start_addr + marea[i].length;
+
+          for (uint va = start_addr; va < end_addr; va += PGSIZE){
+            pte_t *pte = walkpgdir(curproc->pgdir, (void*)va, 0); 
+            if (pte && (*pte & PTE_P)){
+              char *mem = kalloc(); 
+              if (!mem){ // kalloc() 실패 
+                return 0; 
+              }
+              memset(mem, 0, PGSIZE);
+              memmove(mem, (void*)va, PGSIZE);
+              int ifFail = mappages(curproc->pgdir, (void *)va, PGSIZE, V2P(mem), prot|PTE_U); // perm에 사용자 권한 추가
+              if (ifFail == -1){ // mappages() 실패
+                kfree(mem);
+                return 0; 
+              } 
+            }
+          }
+          break;
+        }
+      }
+    }
+  }
+
   pid = np->pid;
 
   acquire(&ptable.lock);

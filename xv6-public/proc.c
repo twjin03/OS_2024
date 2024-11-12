@@ -19,7 +19,7 @@
 // • Maximum number of mmap_area array is 64.
 struct mmap_area marea[64] = {0};
 
-extern int freememCount();
+extern uint freememCount(void);
 
 
 struct {
@@ -245,8 +245,12 @@ fork(void)
 
           int isWrite = 0; 
 
+          pte_t *pte; 
+
           for (uint va = start_addr; va < end_addr; va += PGSIZE){
-            pte_t *pte = walkpgdir(curproc->pgdir, (void*)va, 0); 
+            pte = walkpgdir(curproc->pgdir, (void*)va, 0); 
+            if(!pte) continue; 
+            if(!(*pte & PTE_P)) continue; 
             if (pte && (*pte & PTE_P)){
               char *mem = kalloc(); 
               if (!mem){ // kalloc() 실패 
@@ -902,7 +906,7 @@ int munmap(uint addr){
 
   struct mmap_area *mmap = 0; 
   for (int i = 0; i < 64; i++){
-    if (marea[i].isUsed && (marea[i].addr == addr)){
+    if (marea[i].isUsed == 1 && (marea[i].addr == addr)){
       mmap = &marea[i];
       break;
     }
@@ -917,9 +921,12 @@ int munmap(uint addr){
   
   uint start_addr = mmap->addr; 
   uint end_addr = start_addr + mmap->length;
+  pte_t *pte; 
 
   for (uint va = start_addr; va < end_addr; va += PGSIZE){
-    pte_t *pte = walkpgdir(curproc->pgdir, (void*)va, 0); 
+    pte = walkpgdir(curproc->pgdir, (void*)va, 0); 
+    if(!pte) continue; 
+    if(!(*pte & PTE_P)) continue; 
     if (pte && (*pte & PTE_P)){
       char *pa = P2V(PTE_ADDR(*pte));
       // memset(physical_page, 1, PGSIZE); // ??

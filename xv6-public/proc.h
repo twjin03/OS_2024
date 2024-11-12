@@ -75,3 +75,5 @@ struct mmap_area {
 
 // • Manage all mmap areas created by each mmap() call in one mmap_area array.
 // • Maximum number of mmap_area array is 64. / mmap_area entry 최대 수는 64, 이 값을 넘는 경우는 평가하지 않음 
+
+int page_fault_handler(struct trapframe *tf);

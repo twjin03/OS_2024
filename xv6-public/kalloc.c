@@ -101,6 +101,7 @@ char*
 kalloc(void)
 {
   struct run *r;
+  fmemCount--; 
 
   if(kmem.use_lock)
     acquire(&kmem.lock);
@@ -113,7 +114,7 @@ kalloc(void)
 }
 
 // 값 반환 위한 함수 
-int freememCount(void){
+uint freememCount(void){
   return fmemCount; 
 }
 

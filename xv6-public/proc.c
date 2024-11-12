@@ -208,7 +208,7 @@ growproc(int n)
 // Caller must set state of returned proc to RUNNABLE.
 
 //pa3) fork()는 부모와 완전히 동일한 메모리 콘텐츠를 갖는 자식을 생성 
-/*
+
 int
 fork(void)
 {
@@ -286,50 +286,7 @@ fork(void)
 
   return pid;
 }
-*/
-int
-fork(void)
-{
-  int i, pid;
-  struct proc *np;
-  struct proc *curproc = myproc();
 
-  // Allocate process.
-  if((np = allocproc()) == 0){
-    return -1;
-  }
-
-  // Copy process state from proc.
-  if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
-    kfree(np->kstack);
-    np->kstack = 0;
-    np->state = UNUSED;
-    return -1;
-  }
-  np->sz = curproc->sz;
-  np->parent = curproc;
-  *np->tf = *curproc->tf;
-
-  // Clear %eax so that fork returns 0 in the child.
-  np->tf->eax = 0;
-
-  for(i = 0; i < NOFILE; i++)
-    if(curproc->ofile[i])
-      np->ofile[i] = filedup(curproc->ofile[i]);
-  np->cwd = idup(curproc->cwd);
-
-  safestrcpy(np->name, curproc->name, sizeof(curproc->name));
-
-  pid = np->pid;
-
-  acquire(&ptable.lock);
-
-  np->state = RUNNABLE;
-
-  release(&ptable.lock);
-
-  return pid;
-}
 
 // Exit the current process.  Does not return.
 // An exited process remains in the zombie state
@@ -646,7 +603,6 @@ procdump(void)
 
 
 //pa3) mmap() system call on xv6
-
 uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
   struct proc *curproc = myproc();
   uint start_addr = MMAPBASE + addr;

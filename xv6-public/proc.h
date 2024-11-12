@@ -58,8 +58,6 @@ struct proc {
 //   expandable heap
 
 
-
-
 //pa3
 struct mmap_area {
   int isUsed; 

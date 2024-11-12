@@ -584,7 +584,7 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
     file = filedup(file);
   }
 
-  // find unused mmap_area
+  // find unused mmap_area & 할당 
   for (int i = 0; i < 64; i++){
     if (marea[i].isUsed == 0){
       marea[i].isUsed = 1; 
@@ -599,31 +599,35 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
     }
   }
   
+  // If MAP_POPULATE is not given, just record its mapping area. 
+  // -> page fault 발생하면 allocate physical page & make page table to according page
 
   // 3) If MAP_POPULATE is given, allocate physical page & make page table for whole mapping area.
   // 4) If MAP_POPULATE is not given, just record its mapping area.
   if (flags & MAP_POPULATE){
     for (uint va = start_addr; va < end_addr; va+= PGSIZE){
       char *mem = kalloc(); 
-      if (mem == 0){
+      if (mem == 0){ // kalloc() 실패 
         return 0; 
       }
       memset(mem, 0, PGSIZE);
 
-      int ifFail = mappages(curproc->pgdir, (void *)va, PGSIZE, V2P(mem), prot|PTE_U); //?? 
-      if (ifFail == -1){
+      if (!(flags & MAP_ANONYMOUS)){
+        file->off = offset; 
+        fileread(file, mem, PGSIZE); // 실제 파일 값을 페이지 단위로 읽어 들여 mem 에 저장 
+      }
+
+      // intmappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
+      // 페이지 디렉터리 포인터 pgdir, 시작 가상 주소 va, 매핑할 바이트 크기 size, 시작 물리 주소 pa, 페이지 권한 perm
+      int ifFail = mappages(curproc->pgdir, (void *)va, PGSIZE, V2P(mem), prot|PTE_U); // perm에 사용자 권한 추가
+      if (ifFail == -1){ // mappages() 실패
         kfree(mem);
         return 0; 
       }
       // mappages (1760) installs mappings into a page table for a range of virtual addresses to a corresponding range of physical addresses
       // mappages 함수는 주어진 가상 주소(virtual address) 범위에 대해 페이지 테이블 항목(Page Table Entry, PTE)을 생성하여 가상 주소에서 시작하는 메모리 영역을 물리 주소(physical address)와 매핑
 
-      if (!(flags & MAP_ANONYMOUS)){
-        file->off = offset; 
-        fileread(file, mem, PGSIZE); // ??
-      }
-    }
-    
+    }  
   }
   return start_addr;
 
@@ -702,11 +706,14 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
 //pa3
 // 2. Page Fault Handler on xv6
 
-// Page fault handler is for dealing with access on mapping region with physical
-// page & page table is not allocated
+// Page fault handler is for dealing with access on mapping region with physical page & page table is not allocated
 // • Succeed: Physical pages and page table entries are created normally, and the process works
 // without any problems
 // • Failed: The process is terminated
+
+int page_fault_handler (uint addr, uint err){
+  
+}
 // 1. When an access occurs (read/write), catch according page fault (interrupt 14, T_PGFLT) in
 // traps.h
 // 2. In page fault handler, determine fault address by reading CR2 register(using rcr2()) & access

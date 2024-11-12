@@ -877,20 +877,21 @@ int munmap(uint addr){
     pte_t *pte = walkpgdir(curproc->pgdir, (void*)va, 0); 
     if (pte && (*pte & PTE_P)){
       char *pa = P2V(PTE_ADDR(*pte));
-
       // memset(physical_page, 1, PGSIZE); // ??
-
       kfree(pa); 
       *pte = 0; 
     }
   }
   mmap->isUsed = 0; 
-  
-  if (mmap->f){
-    fileclose(mmap->f);
-    return 0; 
-  }
+  if(mmap->f) fileclose(mmap->f); // ??
+  mmap->addr = 0; 
+  mmap->length = 0; 
+  mmap->offset = 0; 
+  mmap->prot = 0; 
+  mmap->flags = 0; 
+  mmap->p = 0; 
 
+  return 1; 
 }
 
 

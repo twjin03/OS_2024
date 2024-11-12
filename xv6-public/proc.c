@@ -743,8 +743,9 @@ int page_fault_handler(struct trapframe *tf){
     return -1; 
   }
 
-  cprintf('\npage fault ... %x\n', rounded_addr); 
+  // cprintf('\npage fault ... %x\n', rounded_addr);  // ??
 
+  /*
   uint start_addr = mmap->addr; 
   uint end_addr = start_addr + mmap->length; 
 
@@ -790,6 +791,31 @@ int page_fault_handler(struct trapframe *tf){
 
   }
 
+  */ 
+
+  char *mem = kalloc();
+  if (!mem) return -1;
+  memset(mem, 0, PGSIZE); // Zero-out the new page
+
+  if (!(mmap->flags & MAP_ANONYMOUS)) {
+    struct file *file = mmap->f;
+    file->off = mmap->offset;
+    fileread(file, mem, PGSIZE);
+    mmap->offset += PGSIZE; // Move file offset
+  }
+
+  int perm = mmap->prot | PTE_U;
+  if (isWrite) perm |= PTE_W;
+
+  if (mappages(curproc->pgdir, (void *)rounded_addr, PGSIZE, V2P(mem), perm) < 0) {
+    kfree(mem);
+    return -1;
+  }
+
+  return 0;
+
+
+
 
 }
 // 1. When an access occurs (read/write), catch according page fault (interrupt 14, T_PGFLT) in
@@ -815,17 +841,18 @@ int page_fault_handler(struct trapframe *tf){
 // 3. munmap() system call on xv6
 // - Unmaps corresponding mapping area
 // - Return value: 1(succeed), -1(failed)
-// 1. addr will be always given with the start address of mapping region, which is page
-// aligned
-// 2. munmap() should remove corresponding mmap_area structure
-// If there is no mmap_area of process starting with the address, return -1
-// 3. If physical page is allocated & page table is constructed, should free physical page
-// & page table
-// When freeing the physical page should fill with 1 and put it back to freelist
-// 4. If physical page is not allocated (page fault has not been occurred on that
-// address), just remove mmap_area structure.
-// 5. Notice) In one mmap_area, situation of some of pages are allocated and some
-// are not can happen.
+
+  // 1. addr will be always given with the start address of mapping region, which is page
+  // aligned
+  // 2. munmap() should remove corresponding mmap_area structure
+  // If there is no mmap_area of process starting with the address, return -1
+  // 3. If physical page is allocated & page table is constructed, should free physical page
+  // & page table
+  // When freeing the physical page should fill with 1 and put it back to freelist
+  // 4. If physical page is not allocated (page fault has not been occurred on that
+  // address), just remove mmap_area structure.
+  // 5. Notice) In one mmap_area, situation of some of pages are allocated and some
+  // are not can happen.
 int munmap(uint addr){
   struct proc *curproc = myproc();
 
@@ -836,6 +863,13 @@ int munmap(uint addr){
       break;
     }
   }
+
+  if (!mmap){ // If there is no mmap_area of process starting with the address, return -1
+    return -1; 
+  }
+
+  // 3. If physical page is allocated & page table is constructed, 
+  // should free physical page & page table
   
 
 

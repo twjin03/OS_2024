@@ -595,8 +595,12 @@ procdump(void)
 
 //pa3) mmap() system call on xv6
 uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
+
   // addr is always page-aligned 
   // length is also a multiple of page size 
+  if (addr % PGSIZE != 0 || length % PGSIZE != 0){ // Address argument must be page aligned, if not, return 0
+    return 0; 
+  }
 
   struct proc *curproc = myproc();
   uint start_addr = MMAPBASE + addr;
@@ -745,6 +749,11 @@ int page_fault_handler(struct trapframe *tf){
 // unmaps corresponding mapping area: remove corresponding mmap_area structure
 // return value: 1(succeed), -1(failed)
 int munmap(uint addr){ // addr: start addr of mapping region, page aligned 
+
+  if (addr % PGSIZE != 0) {
+    return 0;
+  } 
+
   struct proc *curproc = myproc();
 
   struct mmap_area *mmap = 0; 

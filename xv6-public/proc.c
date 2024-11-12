@@ -607,7 +607,7 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
   if (flags & MAP_POPULATE){
     for (uint va = start_addr; va < end_addr; va+= PGSIZE){
       char *mem = kalloc(); 
-      if (mem == 0){ // kalloc() 실패 
+      if (!mem){ // kalloc() 실패 
         return 0; 
       }
       memset(mem, 0, PGSIZE);
@@ -711,23 +711,108 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
 // without any problems
 // • Failed: The process is terminated
 
-int page_fault_handler (uint addr, uint err){
+int page_fault_handler(struct trapframe *tf){
+  struct proc *curproc = myproc();
+
+  // 2. In page fault handler, determine fault address by reading CR2 register(using rcr2()) 
+  // & access was read or write
+  uint fault_addr = rcr2(); // CR2 레지스터에서 페이지 폴트 주소 읽기
+
+  uint rounded_addr = PGROUNDDOWN(fault_addr); // ?? 페이지 경계로 주소 정렬
+
+  int isWrite = (tf->err&2) ? 1 : 0; 
+  // write: tf->err&2 == 1 / read: tf->err&2 == 0  
+
+
+  // 3. Find according mapping region in mmap_area
+  int i = 0; 
+  struct mmap_area *mmap = 0; // mmap_area 구조체 포인터 초기화
+  for (int i = 0; i < 64; i++){
+    if (marea[i].isUsed == 1 && marea[i].p == curproc){ // 사용 중인지 확인 
+      if (marea[i].addr <= rounded_addr && rounded_addr < (marea[i].addr + marea[i].length)){
+        mmap = &marea[i]; 
+        break; 
+      }
+
+    }
+  }
+
+  if (!mmap){ // If faulted address has no corresponding mmap_area, return -1
+    return -1; 
+  }
+
+  if (isWrite && !(mmap->prot & PROT_WRITE)){ // 4. If fault was write while mmap_area is write prohibited, then return -1
+    return -1; 
+  }
+
+  // 5. For only one page according to faulted address
+  for (rounded_addr; )
+    // 1. Allocate new physical page
+  char *mem = kalloc(); 
+  if(!mem){ // kalloc() 실패
+    return -1; 
+  }
+    // 2. Fill new page with 0
+  memset(mem, 0, PGSIZE); 
+
+  if (!(mmap->flags & MAP_ANONYMOUS)){
+    struct file *file = mmap->f; 
+    file->off = mmap->offset; 
+    fileread(file, mem, PGSIZE); // 실제 파일 값을 페이지 단위로 읽어 들여 mem 에 저장 
+
+    int perm = mmap->prot|PTE_U; 
+    if (isWrite){
+      perm = perm|PTE_W;
+    }
+
+    // intmappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
+    // 페이지 디렉터리 포인터 pgdir, 시작 가상 주소 va, 매핑할 바이트 크기 size, 시작 물리 주소 pa, 페이지 권한 perm
+    int ifFail = mappages(curproc->pgdir, (void *)rounded_addr, PGSIZE, V2P(mem), perm); 
+    if (ifFail == -1){ // mappages() 실패
+      kfree(mem);
+      return 0; 
+    }
+
+    file->off += PGSIZE;
+
+  }
+
+
+
+
+
+    // 3. If it is file mapping, read file into the physical page with offset
+  if (mmap->f){
+    
+  }
+    // 4. If it is anonymous mapping, just left the page which is filled with 0s
+    // 5. Make page table & fill it properly (if it was PROT_WRITE, PTE_W should be 1 in PTE value)
+
+
+
+
   
+
 }
 // 1. When an access occurs (read/write), catch according page fault (interrupt 14, T_PGFLT) in
 // traps.h
+// #define T_PGFLT         14      // page fault
+
 // 2. In page fault handler, determine fault address by reading CR2 register(using rcr2()) & access
 // was read or write
 // read: tf->err&2 == 0 / write: tf->err&2 == 1
+
 // 3. Find according mapping region in mmap_area
 // If faulted address has no corresponding mmap_area, return -1
+
 // 4. If fault was write while mmap_area is write prohibited, then return -1
+
 // 5. For only one page according to faulted address
-// 1. Allocate new physical page
-// 2. Fill new page with 0
-// 3. If it is file mapping, read file into the physical page with offset
-// 4. If it is anonymous mapping, just left the page which is filled with 0s
-// 5. Make page table & fill it properly (if it was PROT_WRITE, PTE_W should be 1 in PTE value)
+  // 1. Allocate new physical page
+  // 2. Fill new page with 0
+  // 3. If it is file mapping, read file into the physical page with offset
+  // 4. If it is anonymous mapping, just left the page which is filled with 0s
+  // 5. Make page table & fill it properly (if it was PROT_WRITE, PTE_W should be 1 in PTE value)
 
 
 // 3. munmap() system call on xv6

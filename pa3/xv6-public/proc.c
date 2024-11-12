@@ -258,6 +258,11 @@ fork(void)
             if(!pte) continue; 
             if(!(*pte & PTE_P)) continue; 
 
+            char *mem = kalloc();
+            if(!mem) return 0; 
+            memset(mem, 0, PGSIZE);
+            memmove(mem, (void*)va, PGSIZE); // copy parent's pages
+
             int perm = marea[i].prot | PTE_U;
             if (*pte & PTE_W) perm |= PTE_W;
             if (mappages(np->pgdir, (void *)va, PGSIZE, PTE_ADDR(*pte), perm) == -1) {

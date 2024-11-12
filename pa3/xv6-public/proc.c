@@ -606,8 +606,6 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
     return 0; // fail if length is invalid
   }
 
-  // 1) If MAP_ANONYMOUS is given, it is anonymous mapping / mapped memory�� 0���� ä����
-  // 2) If MAP_ANONYMOUS is not given, it is file mapping / file�� �־��� fd, �� file descripter�� ���� ���εǰ� mapped memory�� ������ ���빰�� �����ϰ� ��
   // - It's not anonymous, but when the fd is -1
   if (!(flags & MAP_ANONYMOUS) && fd == -1){
     return 0; 
@@ -664,25 +662,34 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
       }
     }  
   }
-  return start_addr;
+  return start_addr; // succeed 
 }
 
+
+// page fault handler 
+// for dealing with access on mappig region 
+// with physical page & page table is not allocated
+
+// succed: physical page & page table entries are created normally 
+// and process works without any problems 
+
+// failed: the process is terminated
+// -> refer. trap.c !!
 
 int page_fault_handler(struct trapframe *tf){
   struct proc *curproc = myproc();
 
   // 2. In page fault handler, determine fault address by reading CR2 register(using rcr2()) 
   // & access was read or write
-  uint fault_addr = rcr2(); // CR2 �������Ϳ��� ������ ��Ʈ �ּ� �б�
-
-  uint rounded_addr = PGROUNDDOWN(fault_addr); // ?? ������ ���� �ּ� ����
+  uint fault_addr = rcr2(); 
+  uint rounded_addr = PGROUNDDOWN(fault_addr);
 
   int isWrite = (tf->err&2) ? 1 : 0; 
   // write: tf->err&2 == 1 / read: tf->err&2 == 0  
 
 
   // 3. Find according mapping region in mmap_area
-  struct mmap_area *mmap = 0; // mmap_area ����ü ������ �ʱ�ȭ
+  struct mmap_area *mmap = 0; 
   for (int i = 0; i < 64; i++){
     if (marea[i].isUsed == 1 && marea[i].p == curproc){ // ��� ������ Ȯ�� 
       if (marea[i].addr <= rounded_addr && rounded_addr < (marea[i].addr + marea[i].length)){
@@ -691,7 +698,6 @@ int page_fault_handler(struct trapframe *tf){
       }
     }
   }
-
   if (!mmap){ // If faulted address has no corresponding mmap_area, return -1
     return -1; 
   }
@@ -700,18 +706,19 @@ int page_fault_handler(struct trapframe *tf){
     return -1; 
   }
 
-  // cprintf('\npage fault ... %x\n', rounded_addr);  // ??
-
+  // for only one page according to faulted adress
   char *mem = kalloc(); // allocate new physical page
   if (!mem) return -1;
   memset(mem, 0, PGSIZE); // fill new page with 0 
 
+  // if it is file mapping,
   if (!(mmap->flags & MAP_ANONYMOUS)) { // read file into physical page with offset
     struct file *file = mmap->f;
     file->off = mmap->offset;
     fileread(file, mem, PGSIZE);
     file->off += PGSIZE; // Move file offset
   }
+  // If it is anonymous mapping, just left the page which is filled with 0s
 
   int perm = mmap->prot | PTE_U;
   if (isWrite) perm = perm|PTE_W;
@@ -722,6 +729,7 @@ int page_fault_handler(struct trapframe *tf){
   }
   return 0;
 }
+
 
 int munmap(uint addr){
   struct proc *curproc = myproc();

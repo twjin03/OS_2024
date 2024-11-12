@@ -80,9 +80,9 @@ trap(struct trapframe *tf)
 
   //pa3) call page fault hadler 
   case T_PGFLT:
-    page_fault_handler(tf);
-    break; 
-    
+    if (page_fault_handler(tf) != -1){
+      break;
+    } 
 
   //PAGEBREAK: 13
   default:

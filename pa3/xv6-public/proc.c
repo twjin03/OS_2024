@@ -595,6 +595,9 @@ procdump(void)
 
 //pa3) mmap() system call on xv6
 uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
+  // addr is always page-aligned 
+  // length is also a multiple of page size 
+
   struct proc *curproc = myproc();
   uint start_addr = MMAPBASE + addr;
   uint end_addr = start_addr + length;
@@ -603,17 +606,18 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
     return 0; // fail if length is invalid
   }
 
-  // 1) If MAP_ANONYMOUS is given, it is anonymous mapping / mapped memory´Â 0À¸·Î Ã¤¿öÁü
-  // 2) If MAP_ANONYMOUS is not given, it is file mapping / fileÀº ÁÖ¾îÁø fd, Áï file descripter¸¦ ÅëÇØ ¸ÅÇÎµÇ°í mapped memory´Â ÆÄÀÏÀÇ ³»¿ë¹°À» Æ÷ÇÔÇÏ°Ô µÊ
+  // 1) If MAP_ANONYMOUS is given, it is anonymous mapping / mapped memoryï¿½ï¿½ 0ï¿½ï¿½ï¿½ï¿½ Ã¤ï¿½ï¿½ï¿½ï¿½
+  // 2) If MAP_ANONYMOUS is not given, it is file mapping / fileï¿½ï¿½ ï¿½Ö¾ï¿½ï¿½ï¿½ fd, ï¿½ï¿½ file descripterï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ÎµÇ°ï¿½ mapped memoryï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ë¹°ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï°ï¿½ ï¿½ï¿½
   // - It's not anonymous, but when the fd is -1
   if (!(flags & MAP_ANONYMOUS) && fd == -1){
     return 0; 
   }
 
-  // NON_ANONYMOUS mappingÀ» À§ÇÑ ÆÄÀÏ 
   struct file *file = (flags & MAP_ANONYMOUS) ? 0 : curproc->ofile[fd]; // ??
 
   // Check file protection compatibility
+  //prot can be PROT_READ or PROT_READ|PROT_WRITE
+  //prot should be match with file's open flag
   if (file) {
     if ((prot & PROT_READ) && !(file->readable)) {
       return 0; // fail if file is not readable
@@ -624,7 +628,6 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
     file = filedup(file); // duplicate file to keep it open
   }
 
-  // find unused mmap_area & ÇÒ´ç 
   for (int i = 0; i < 64; i++){
     if (marea[i].isUsed == 0){
       marea[i].isUsed = 1; 
@@ -639,34 +642,29 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
     }
   }
   // If MAP_POPULATE is not given, just record its mapping area. 
-  // -> page fault ¹ß»ýÇÏ¸é allocate physical page & make page table to according page
 
   // If MAP_POPULATE is given, 
   if (flags & MAP_POPULATE){
     for (uint va = start_addr; va < end_addr; va+= PGSIZE){
       char *mem = kalloc(); // 1) allocate physical page
-      if (!mem){ // kalloc() ½ÇÆÐ 
+      if (!mem){ // kalloc() fail
         return 0; 
       }
       memset(mem, 0, PGSIZE);
 
       if (!(flags & MAP_ANONYMOUS)){
         file->off = offset; 
-        fileread(file, mem, PGSIZE); // ½ÇÁ¦ ÆÄÀÏ °ªÀ» ÆäÀÌÁö ´ÜÀ§·Î ÀÐ¾î µé¿© mem ¿¡ ÀúÀå 
+        fileread(file, mem, PGSIZE); 
       }
 
       // 2) make page table for whole mapping area.
-      int ifFail = mappages(curproc->pgdir, (void *)va, PGSIZE, V2P(mem), prot|PTE_U); // perm¿¡ »ç¿ëÀÚ ±ÇÇÑ Ãß°¡ 
-      if (ifFail == -1){ // mappages() ½ÇÆÐ
+      int ifFail = mappages(curproc->pgdir, (void *)va, PGSIZE, V2P(mem), prot|PTE_U); 
+      if (ifFail == -1){ 
         return 0; 
       }
-      // mappages ÇÔ¼ö´Â ÁÖ¾îÁø °¡»ó ÁÖ¼Ò(virtual address) ¹üÀ§¿¡ ´ëÇØ ÆäÀÌÁö Å×ÀÌºí Ç×¸ñ(Page Table Entry, PTE)À» »ý¼ºÇÏ¿© 
-      // °¡»ó ÁÖ¼Ò¿¡¼­ ½ÃÀÛÇÏ´Â ¸Þ¸ð¸® ¿µ¿ªÀ» ¹°¸® ÁÖ¼Ò(physical address)¿Í ¸ÅÇÎ
-
     }  
   }
   return start_addr;
-  
 }
 
 
@@ -675,18 +673,18 @@ int page_fault_handler(struct trapframe *tf){
 
   // 2. In page fault handler, determine fault address by reading CR2 register(using rcr2()) 
   // & access was read or write
-  uint fault_addr = rcr2(); // CR2 ·¹Áö½ºÅÍ¿¡¼­ ÆäÀÌÁö ÆúÆ® ÁÖ¼Ò ÀÐ±â
+  uint fault_addr = rcr2(); // CR2 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¿ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ® ï¿½Ö¼ï¿½ ï¿½Ð±ï¿½
 
-  uint rounded_addr = PGROUNDDOWN(fault_addr); // ?? ÆäÀÌÁö °æ°è·Î ÁÖ¼Ò Á¤·Ä
+  uint rounded_addr = PGROUNDDOWN(fault_addr); // ?? ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ö¼ï¿½ ï¿½ï¿½ï¿½ï¿½
 
   int isWrite = (tf->err&2) ? 1 : 0; 
   // write: tf->err&2 == 1 / read: tf->err&2 == 0  
 
 
   // 3. Find according mapping region in mmap_area
-  struct mmap_area *mmap = 0; // mmap_area ±¸Á¶Ã¼ Æ÷ÀÎÅÍ ÃÊ±âÈ­
+  struct mmap_area *mmap = 0; // mmap_area ï¿½ï¿½ï¿½ï¿½Ã¼ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­
   for (int i = 0; i < 64; i++){
-    if (marea[i].isUsed == 1 && marea[i].p == curproc){ // »ç¿ë ÁßÀÎÁö È®ÀÎ 
+    if (marea[i].isUsed == 1 && marea[i].p == curproc){ // ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½ 
       if (marea[i].addr <= rounded_addr && rounded_addr < (marea[i].addr + marea[i].length)){
         mmap = &marea[i]; 
         break; 

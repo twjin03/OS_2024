@@ -12,7 +12,6 @@
 #include "file.h"
 
 
-
 #define MMAPBASE 0x40000000 //pa3
 
 // • Manage all mmap areas created by each mmap() call in one mmap_area array.
@@ -789,75 +788,26 @@ int page_fault_handler(struct trapframe *tf){
 
   // cprintf('\npage fault ... %x\n', rounded_addr);  // ??
 
-  /*
-  uint start_addr = mmap->addr; 
-  uint end_addr = start_addr + mmap->length; 
-
-  for (uint va = start_addr; va < end_addr; va+= PGSIZE){
-    if ((va <= rounded_addr) && (rounded_addr < va + PGSIZE)){
-      char *mem = kalloc(); 
-      if(!mem){
-        return 0; // kalloc() 실패 
-      }
-      memset(mem, 0, PGSIZE);
-
-      if (!(mmap->flags & MAP_ANONYMOUS)){
-        struct file *file = mmap->f; 
-        fileread(file, mem, PGSIZE); 
-
-        int perm = mmap->prot|PTE_U; 
-        if (isWrite){
-          perm = perm|PTE_W;
-        }
-        int ifFail = mappages(curproc->pgdir, (void *)rounded_addr, PGSIZE, V2P(mem), perm); 
-        if (ifFail == -1){ // mappages() 실패
-          kfree(mem);
-          return 0; 
-        }
-
-        file->off += PGSIZE;
-      }
-
-      else{
-        int perm = mmap->prot|PTE_U; 
-        if (isWrite){
-          perm = perm|PTE_W;
-        }
-        int ifFail = mappages(curproc->pgdir, (void *)rounded_addr, PGSIZE, V2P(mem), perm); 
-        if (ifFail == -1){ // mappages() 실패
-          kfree(mem);
-          return 0; 
-        }
-      }
-    }
-
-    return 0; 
-
-  }
-
-  */ 
-
-  char *mem = kalloc();
+  char *mem = kalloc(); // allocate new physical page
   if (!mem) return -1;
-  memset(mem, 0, PGSIZE); // Zero-out the new page
+  memset(mem, 0, PGSIZE); // fill new page with 0 
 
-  if (!(mmap->flags & MAP_ANONYMOUS)) {
+  if (!(mmap->flags & MAP_ANONYMOUS)) { // read file into physical page with offset
     struct file *file = mmap->f;
     file->off = mmap->offset;
     fileread(file, mem, PGSIZE);
-    mmap->offset += PGSIZE; // Move file offset
+    file->off += PGSIZE; // Move file offset
   }
 
   int perm = mmap->prot | PTE_U;
-  if (isWrite) perm |= PTE_W;
+  if (isWrite) perm = perm|PTE_W;
 
+  // make page table & fill it properly (if it was PROT_WRITE, PTE_W should be 1 in PTE value)
   if (mappages(curproc->pgdir, (void *)rounded_addr, PGSIZE, V2P(mem), perm) < 0) {
     kfree(mem);
     return -1;
   }
-
   return 0;
-
 }
 // 1. When an access occurs (read/write), catch according page fault (interrupt 14, T_PGFLT) in
 // traps.h

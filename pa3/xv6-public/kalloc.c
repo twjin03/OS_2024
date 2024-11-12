@@ -57,8 +57,8 @@ freerange(void *vstart, void *vend)
 // call to kalloc().  (The exception is when
 // initializing the allocator; see kinit above.)
 
-// pa3) freemem 구현 위한 fmemCount 계산 
-uint fmemCount = 0; 
+// pa3)
+uint fmemCount; 
 
 void
 kfree(char *v)
@@ -70,7 +70,7 @@ kfree(char *v)
 
   // Fill with junk to catch dangling refs.
   memset(v, 1, PGSIZE);
-  // fmemCount 증가시킴 
+  // freemem increase
   fmemCount++; 
   
   if(kmem.use_lock)
@@ -89,6 +89,7 @@ char*
 kalloc(void)
 {
   struct run *r;
+  // freemem decrease
   fmemCount--; 
 
   if(kmem.use_lock)
@@ -101,7 +102,7 @@ kalloc(void)
   return (char*)r;
 }
 
-// 값 반환 위한 함수 
+
 uint freememCount(void){
   return fmemCount; 
 }

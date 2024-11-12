@@ -782,9 +782,9 @@ int munmap(uint addr){ // addr: start addr of mapping region, page aligned
 // Notice) In one mmap_area, situation of some of pages are allocated and some
 // are not can happen.
 
+
+// syscall to return current number of free memory pages 
+// refer. kalloc.c !!
 int freemem(void){
   return freememCount(); 
 }  
-
-
-

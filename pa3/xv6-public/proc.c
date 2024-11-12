@@ -731,7 +731,9 @@ int page_fault_handler(struct trapframe *tf){
 }
 
 
-int munmap(uint addr){
+// unmaps corresponding mapping area: remove corresponding mmap_area structure
+// return value: 1(succeed), -1(failed)
+int munmap(uint addr){ // addr: start addr of mapping region, page aligned 
   struct proc *curproc = myproc();
 
   struct mmap_area *mmap = 0; 
@@ -757,10 +759,11 @@ int munmap(uint addr){
     pte = walkpgdir(curproc->pgdir, (void*)va, 0); 
     if(!pte) continue; 
     if(!(*pte & PTE_P)) continue; 
-    if (pte && (*pte & PTE_P)){
+    if (pte && (*pte & PTE_P)){ // if physical page is allocated & page table is constructed, 
       char *pa = P2V(PTE_ADDR(*pte));
       kfree(pa); 
       *pte = 0; 
+      // should free physical page & page table
     }
   }
   // If physical page is not allocated (page fault has not been occurred on that address), 
@@ -776,6 +779,8 @@ int munmap(uint addr){
 
   return 1; 
 }
+// Notice) In one mmap_area, situation of some of pages are allocated and some
+// are not can happen.
 
 int freemem(void){
   return freememCount(); 

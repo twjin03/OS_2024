@@ -10,6 +10,8 @@ struct sleeplock;
 struct stat;
 struct superblock;
 
+struct trapframe; 
+
 // bio.c
 void            binit(void);
 struct buf*     bread(uint, uint);
@@ -124,7 +126,7 @@ void            wakeup(void*);
 void            yield(void);
 
 uint            mmap(uint, int, int, int, int, int);
-int             pfh(uint, uint);
+int             page_fault_handler(struct trapframe*);
 int             munmap(uint);
 int             freemem(void);
 
@@ -193,8 +195,8 @@ void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
 
-int             mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm);
-pte_t *         walkpgdir(pde_t *pgdir, const void *va, int alloc);
+int             mappages(pde_t*, void*, uint, uint, int);
+pte_t*          walkpgdir(pde_t*, const void*, int);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

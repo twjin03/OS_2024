@@ -16,7 +16,18 @@
 
 // • Manage all mmap areas created by each mmap() call in one mmap_area array.
 // • Maximum number of mmap_area array is 64.
-struct mmap_area marea[64] = {0};
+struct mmap_area marea[64];
+
+void init_marea(int i){
+  marea[i].isUsed = 0; 
+  marea[i].f = 0; 
+  marea[i].addr = 0; 
+  marea[i].length = 0; 
+  marea[i].offset = 0; 
+  marea[i].prot = 0; 
+  marea[i].flags = 0;
+  marea[i].p = 0; 
+}
 
 extern uint freememCount(void);
 
@@ -134,6 +145,10 @@ found:
 void
 userinit(void)
 {
+
+  for (int i = 0; i < 64; i++){
+    init_marea(i);
+  }
   struct proc *p;
   extern char _binary_initcode_start[], _binary_initcode_size[];
 
@@ -193,6 +208,7 @@ growproc(int n)
 // Caller must set state of returned proc to RUNNABLE.
 
 //pa3) fork()는 부모와 완전히 동일한 메모리 콘텐츠를 갖는 자식을 생성 
+/*
 int
 fork(void)
 {
@@ -259,6 +275,50 @@ fork(void)
       }
     }
   }
+
+  pid = np->pid;
+
+  acquire(&ptable.lock);
+
+  np->state = RUNNABLE;
+
+  release(&ptable.lock);
+
+  return pid;
+}
+*/
+int
+fork(void)
+{
+  int i, pid;
+  struct proc *np;
+  struct proc *curproc = myproc();
+
+  // Allocate process.
+  if((np = allocproc()) == 0){
+    return -1;
+  }
+
+  // Copy process state from proc.
+  if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
+    kfree(np->kstack);
+    np->kstack = 0;
+    np->state = UNUSED;
+    return -1;
+  }
+  np->sz = curproc->sz;
+  np->parent = curproc;
+  *np->tf = *curproc->tf;
+
+  // Clear %eax so that fork returns 0 in the child.
+  np->tf->eax = 0;
+
+  for(i = 0; i < NOFILE; i++)
+    if(curproc->ofile[i])
+      np->ofile[i] = filedup(curproc->ofile[i]);
+  np->cwd = idup(curproc->cwd);
+
+  safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
   pid = np->pid;
 
@@ -651,7 +711,6 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset){
       // 2) make page table for whole mapping area.
       int ifFail = mappages(curproc->pgdir, (void *)va, PGSIZE, V2P(mem), prot|PTE_U); // perm에 사용자 권한 추가 
       if (ifFail == -1){ // mappages() 실패
-        kfree(mem);
         return 0; 
       }
       // mappages 함수는 주어진 가상 주소(virtual address) 범위에 대해 페이지 테이블 항목(Page Table Entry, PTE)을 생성하여 
@@ -791,7 +850,6 @@ int page_fault_handler(struct trapframe *tf){
 
   // make page table & fill it properly (if it was PROT_WRITE, PTE_W should be 1 in PTE value)
   if (mappages(curproc->pgdir, (void *)rounded_addr, PGSIZE, V2P(mem), perm) < 0) {
-    kfree(mem);
     return -1;
   }
   return 0;

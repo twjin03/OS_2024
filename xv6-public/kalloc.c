@@ -67,6 +67,11 @@ freerange(void *vstart, void *vend) // 지정된 메모리 범위를 page 단위
 // call to kalloc().  (The exception is when
 // initializing the allocator; see kinit above.)
 
+
+
+// pa3) freemem 구현 위한 fmemCount 계산 
+uint fmemCount; 
+
 void //pa3) kfree() fills page with 1s, and put it into freelist (page pool)
 kfree(char *v) // physical memory의 페이지를 해제 
 {
@@ -77,6 +82,8 @@ kfree(char *v) // physical memory의 페이지를 해제
 
   // Fill with junk to catch dangling refs.
   memset(v, 1, PGSIZE);
+  // fmemCount 증가시킴 
+  fmemCount++; 
 
   if(kmem.use_lock)
     acquire(&kmem.lock);
@@ -103,5 +110,10 @@ kalloc(void)
   if(kmem.use_lock)
     release(&kmem.lock);
   return (char*)r;
+}
+
+// 값 반환 위한 함수 
+int freememCount(void){
+  return fmemCount; 
 }
 

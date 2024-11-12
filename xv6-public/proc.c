@@ -814,9 +814,6 @@ int page_fault_handler(struct trapframe *tf){
 
   return 0;
 
-
-
-
 }
 // 1. When an access occurs (read/write), catch according page fault (interrupt 14, T_PGFLT) in
 // traps.h
@@ -871,19 +868,37 @@ int munmap(uint addr){
   // 3. If physical page is allocated & page table is constructed, 
   // should free physical page & page table
   
+  uint start_addr = mmap->addr; 
+  uint end_addr = start_addr + mmap->length;
 
+  for (uint va = start_addr; va < end_addr; va += PGSIZE){
+    pte_t *pte = walkpgdir(curproc->pgdir, (void*)va, 0); 
+    if (pte && (*pte & PTE_P)){
+      char *pa = P2V(PTE_ADDR(*pte));
 
+      // memset(physical_page, 1, PGSIZE); // ??
 
+      kfree(pa); 
+      *pte = 0; 
+    }
+  }
+  mmap->isUsed = 0; 
+  
+  if (mmap->f){
+    fileclose(mmap->f);
+    return 0; 
+  }
 
 }
+
 
 // 4. freemem() system call on xv6
 // - syscall to return current number of free memory
 // pages
-// 1. When kernel frees (put page into free list),
-// freemem should be increase
-// 2. When kernel allocates (takes page from free list
-// and give it to process), freemem should decrease
+  // 1. When kernel frees (put page into free list),
+  // freemem should be increase
+  // 2. When kernel allocates (takes page from free list
+  // and give it to process), freemem should decrease
 int freemem(){
-  
-}
+  return freememCount(); 
+}  

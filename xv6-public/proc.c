@@ -791,27 +791,9 @@ int page_fault_handler(struct trapframe *tf){
   }
 
 
-
-
-
-
-
-    // 3. If it is file mapping, read file into the physical page with offset
-  if (mmap->f){
-    
-  }
-    // 4. If it is anonymous mapping, just left the page which is filled with 0s
-    // 5. Make page table & fill it properly (if it was PROT_WRITE, PTE_W should be 1 in PTE value)
-
-
-
-
-  
-
 }
 // 1. When an access occurs (read/write), catch according page fault (interrupt 14, T_PGFLT) in
 // traps.h
-// #define T_PGFLT         14      // page fault
 
 // 2. In page fault handler, determine fault address by reading CR2 register(using rcr2()) & access
 // was read or write
@@ -827,7 +809,7 @@ int page_fault_handler(struct trapframe *tf){
   // 2. Fill new page with 0
   // 3. If it is file mapping, read file into the physical page with offset
   // 4. If it is anonymous mapping, just left the page which is filled with 0s
-  // 5. Make page table & fill it properly (if it was PROT_WRITE, PTE_W should be 1 in PTE value)
+  // 5. Make page table & fill it properly (if it was PROT_WRITE, PTE_W should be 1 in PTE value) // ??
 
 
 // 3. munmap() system call on xv6
@@ -845,6 +827,19 @@ int page_fault_handler(struct trapframe *tf){
 // 5. Notice) In one mmap_area, situation of some of pages are allocated and some
 // are not can happen.
 int munmap(uint addr){
+  struct proc *curproc = myproc();
+
+  struct mmap_area *mmap = 0; 
+  for (int i = 0; i < 64; i++){
+    if (marea[i].isUsed && (marea[i].addr == addr)){
+      mmap = &marea[i];
+      break;
+    }
+  }
+  
+
+
+
 
 }
 

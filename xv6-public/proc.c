@@ -19,6 +19,8 @@
 // • Maximum number of mmap_area array is 64.
 struct mmap_area marea[64] = {0};
 
+extern int freememCount();
+
 
 struct {
   struct spinlock lock;

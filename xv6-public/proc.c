@@ -243,6 +243,8 @@ fork(void)
           uint start_addr = marea[i].addr; 
           uint end_addr = start_addr + marea[i].length;
 
+          int isWrite = 0; 
+
           for (uint va = start_addr; va < end_addr; va += PGSIZE){
             pte_t *pte = walkpgdir(curproc->pgdir, (void*)va, 0); 
             if (pte && (*pte & PTE_P)){
@@ -252,7 +254,10 @@ fork(void)
               }
               memset(mem, 0, PGSIZE);
               memmove(mem, (void*)va, PGSIZE);
-              int ifFail = mappages(curproc->pgdir, (void *)va, PGSIZE, V2P(mem), prot|PTE_U); // perm에 사용자 권한 추가
+
+              int perm = marea[i].prot | PTE_U;
+              if (isWrite) perm |= PTE_W;
+              int ifFail = mappages(curproc->pgdir, (void *)va, PGSIZE, V2P(mem), perm); // perm에 사용자 권한 추가
               if (ifFail == -1){ // mappages() 실패
                 kfree(mem);
                 return 0; 

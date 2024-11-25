@@ -89,22 +89,83 @@ kfree(char *v)
 // Allocate one 4096-byte page of physical memory.
 // Returns a pointer that the kernel can use.
 // Returns 0 if the memory cannot be allocated.
-char*
-kalloc(void)
-{
+
+// char*
+// kalloc(void)
+// {
+//   struct run *r;
+
+// //try_again:
+//   if(kmem.use_lock)
+//     acquire(&kmem.lock);
+//   r = kmem.freelist;
+// //  if(!r && reclaim())
+// //	  goto try_again;
+//   if(r)
+//     kmem.freelist = r->next;
+//   if(kmem.use_lock)
+//     release(&kmem.lock);
+//   return (char*)r;
+// }
+
+// ??? ???
+char* kalloc(void) {
   struct run *r;
 
-//try_again:
   if(kmem.use_lock)
     acquire(&kmem.lock);
+
+  // Try to get a free page from the freelist
   r = kmem.freelist;
-//  if(!r && reclaim())
-//	  goto try_again;
-  if(r)
-    kmem.freelist = r->next;
+  if (!r) {
+    // If no free page is available, attempt to reclaim memory
+    if (reclaim() < 0) {
+      // If reclaim fails (OOM), return 0 to indicate failure
+      if (kmem.use_lock)
+        release(&kmem.lock);
+      return 0;  // Out of memory
+    }
+    // Try to allocate again after reclaiming memory
+    r = kmem.freelist;
+    if (!r) {
+      // If there’s still no free page after reclaiming memory, return 0
+      if (kmem.use_lock)
+        release(&kmem.lock);
+      return 0;  // Out of memory
+    }
+  }
+
+  // Remove the page from the freelist
+  kmem.freelist = r->next;
+
   if(kmem.use_lock)
     release(&kmem.lock);
+
   return (char*)r;
+}
+
+
+
+// ??? ???
+// Reclaim memory when no free pages are available
+// This function will select a victim page using the LRU (clock) algorithm,
+// swap it out if necessary, and free up a page.
+int reclaim(void) {
+  // Select a victim page from the LRU list
+  struct page *victim = select_victim();
+  if (!victim) {
+    // If no victim page could be selected (e.g., LRU list is empty), return failure (OOM)
+    cprintf("reclaim: Out of memory, no victim selected\n");
+    return -1; // Indicating failure
+  }
+
+  // If the victim page is not swapped out, we need to swap it out to free space
+  if (!victim->swapped) {
+    swapout(victim);  // Swap out the victim page
+  }
+
+  // Now that we have freed a page, we can return successfully
+  return 0;  // Indicating success
 }
 
 
@@ -130,6 +191,15 @@ kalloc(void)
   // • E.g., page table pages
   // – So, manage swappable pages with LRU list (circular doubly linked list)
   // • When init/alloc/dealloc/copy user virtual memories
+
+// • Page replacement algorithm: clock algorithm
+  // – Use A (Accessed) bit in each PTE (PTE_A : 0x20)
+  // – From lru_head, select a victim page following next pointer
+  // • If PTE_A==1, clear it and send the page to the tail of LRU list
+  // • If PTE_A==0, evict the page (victim page)
+  // – QEMU automatically sets PTE_A bit when accessed
+// • If free page is not obtained through the kalloc() function,
+// swap-out the victim page
 
 
 // ** Swap-out operation in xv6

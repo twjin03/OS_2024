@@ -330,23 +330,18 @@ void swapout(struct page *victim){
   set_bitmap(blkno); 
   release(&swap.lock); 
 
-  // write data in swap space
+  // write data in swap space (swap data out)
   swapwrite(P2V(victim->vaddr), blkno); 
 
-  // update page status 
-  victim->vaddr = (char *)(blkno << SWAP_OFFSET);  // ??? ???
-  victim->pgdir = 0; 
-  victim->swapped = 1; // swapped됨을 표시 ???
-
-  pte_t *pte = walkpgdir(victim->pgdir, victim->vaddr, 0); 
-  if (pte) {
-    *pte = (blkno << SWAP_OFFSET) | PTE_SWAP; // Mark the PTE as swapped with the swap slot address
+  // Update PTE and victim status
+  pte_t *pte = walkpgdir(victim->pgdir, victim->vaddr, 0);
+  if (!pte) {
+    panic("swapout: Invalid PTE");
   }
+  *pte = (blkno << SWAP_OFFSET) | PTE_SWAP; // Set PTE as swapped
+  victim->swapped = 1;
 
   lru_remove(P2V(victim->vaddr)); 
-
-  kfree(P2V(victim->vaddr)); 
-  
 }
   
 
@@ -375,7 +370,7 @@ struct page* swapin(pde_t *pgdir, char *vaddr) {
   clear_bitmap(blkno);
   release(&swap.lock);
 
-  struct page *page = find_page(pgdir, vaddr); // ???
+  struct page *page = &pages[V2P(new_page) / PGSIZE];
   page->vaddr = vaddr;
   page->pgdir = pgdir;
   page->swapped = 0;

@@ -66,8 +66,10 @@ kinit2(void *vstart, void *vend)
   kmem.use_lock = 1;
 
   // initialize swap space bitmap
-  initlock(&swap.lock, "swap");  
+  initlock(&swap.lock, "swap_bitmap");  
   swap.bitmap = kalloc(); // • Use 1 physical page for bitmap to track swap space
+  if (!swap.bitmap)
+    panic("init_swap_bitmap: Failed to allocate bitmap page");
   memset(swap.bitmap, 0, PGSIZE); 
 
   // initialize LRU list 
@@ -381,17 +383,59 @@ struct page* swapin(pde_t *pgdir, char *vaddr) {
 
 
 // 4. Bitmap mgmt
-int find_blkno(){ // ???
-  for (int i = 0; i < SWAPMAX; i++){
-    if(!swap.bitmap[i]) return i; 
+void set_bitmap(int blkno) {
+  int index = blkno - SWAPBASE; // SWAPBASE 기준으로 블록 번호 변환
+  if (index < 0 || index >= SWAPMAX) {
+    panic("set_bitmap: Invalid blkno");
   }
-  return -1; // fail
+
+  acquire(&swap.lock); 
+  swap.bitmap[index / 8] |= (1 << (index % 8)); // 해당 비트를 1로 설정
+  release(&swap.lock); 
 }
 
-void set_bitmap(int blk){
-  swap.bitmap[blk] = 1; 
+void clear_bitmap(int blkno) {
+  int index = blkno - SWAPBASE; // SWAPBASE 기준으로 블록 번호 변환
+  if (index < 0 || index >= SWAPMAX) {
+    panic("clear_bitmap: Invalid blkno");
+  }
+
+  acquire(&swap.lock); 
+  swap.bitmap[index / 8] &= ~(1 << (index % 8)); // 해당 비트를 0으로 설정
+  release(&swap.lock); 
 }
 
-void clear_bitmap(int blk) {
-  swap.bitmap[blk] = 0;
+// ???
+int is_blk_used(int blkno) {
+  int index = blkno - SWAPBASE; // SWAPBASE 기준으로 블록 번호 변환
+  if (index < 0 || index >= SWAPMAX) {
+    panic("is_blk_used: Invalid blkno");
+  }
+
+  acquire(&swap.lock);
+  int used = (swap.bitmap[index / 8] & (1 << (index % 8))) != 0; // 비트 확인
+  release(&swap.lock); 
+  return used;
+}
+
+// ??? ???
+// 빈 스왑 블록 탐색
+int find_free_blkno() {
+  acquire(&swap.lock); // 락 획득
+
+  for (int i = 0; i < SWAPMAX; i++) {
+    if (!(swap.bitmap[i / 8] & (1 << (i % 8)))) { // 빈 비트 확인
+      swap.bitmap[i / 8] |= (1 << (i % 8)); // 비트를 1로 설정 (할당)
+      release(&swap.lock); // 락 해제
+      return SWAPBASE + i; // 실제 블록 번호 반환
+    }
+  }
+
+  release(&swap.lock); // 락 해제
+  return -1; // 빈 블록 없음
+}
+
+// 스왑 블록 해제
+void free_blkno(int blkno) {
+  clear_bitmap(blkno); // 비트 해제
 }

@@ -13,14 +13,14 @@ void freerange(void *vstart, void *vend);
 extern char end[]; // first address after kernel loaded from ELF file
                    // defined by the kernel linker script in kernel.ld
 
-struct run {
+struct run { // page linked-list
   struct run *next;
 };
 
-struct {
+struct { // physical memory mgmt 
   struct spinlock lock;
   int use_lock;
-  struct run *freelist;
+  struct run *freelist;  
 } kmem;
 
 struct page pages[PHYSTOP/PGSIZE];
@@ -47,7 +47,7 @@ kinit2(void *vstart, void *vend)
   freerange(vstart, vend);
   kmem.use_lock = 1;
 }
-
+// initialize pages in given memory area and insert to linked-list by calling kfree
 void
 freerange(void *vstart, void *vend)
 {
@@ -101,6 +101,10 @@ kalloc(void)
     release(&kmem.lock);
   return (char*)r;
 }
+
+
+
+
 
 // • Implement page-level swapping
 // – Swap-in: move the victim page from backing store to main memory
@@ -175,3 +179,50 @@ kalloc(void)
 // • Lock should be considered with shared resource for synchronization
 // • All pages are managed in a struct page
 // – Already implemented in skeleton code (mmu.h)
+
+
+
+// pa4) start!
+
+// 1. LRU list mgmt) 
+// clock algorithm 
+// only user pages are swappable! 
+// -> manage swappable pages with LRU list
+  // not in use 
+  // swappable page
+  // unswappable page
+// (circular doubly linked list)
+// • When init/alloc/dealloc/copy user virtual memories
+
+
+// lru_add
+void lru_add(struct page *page){
+  if(!page_lru_head){
+    page_lru_head = page; 
+    page->next = page; 
+    page->prev = page; 
+  }
+  else{
+    struct page *tail 
+  }
+}
+
+// lru_remove
+
+// select_victim 
+
+
+
+// 2. swap-out
+
+// swapout
+  // victim page) main mem. -> backing store
+
+
+// 3. swap-in
+
+// swapin
+  // victim page) backing store -> main mem.
+
+
+// 4. Bitmap mgmt

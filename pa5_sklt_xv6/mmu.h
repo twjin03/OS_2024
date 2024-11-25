@@ -180,6 +180,7 @@ struct gatedesc {
 
 // used in pa4 
 // All pages are managed in a struct page
+// for managing pages in LRU algorithm
 struct page{
 	struct page *next;
 	struct page *prev;

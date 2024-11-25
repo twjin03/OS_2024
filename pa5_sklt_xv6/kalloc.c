@@ -28,6 +28,11 @@ struct page *page_lru_head;
 int num_free_pages;
 int num_lru_pages;
 
+struct{
+  struct spinlock lock; 
+  char *bitmap; 
+} swap;  // !!! 일단 일케... ???
+
 // Initialization happens in two phases.
 // 1. main() calls kinit1() while still using entrypgdir to place just
 // the pages mapped by entrypgdir on free list.
@@ -101,8 +106,6 @@ kalloc(void)
     release(&kmem.lock);
   return (char*)r;
 }
-
-
 
 
 
@@ -244,13 +247,86 @@ struct page* select_victim(){
 // 2. swap-out
 
 // swapout
+void swapout(struct page *victim){
   // victim page) main mem. -> backing store
+
+  // allocate swap space
+  int blkno; 
+
+  acquire(&swap.lock);
+  blkno = find_blkno(); 
+  if (blkno<0){
+    release(&swap.lock); 
+    panic("swapout: No swap space"); 
+  } 
+  set_bitmap(blkno); 
+  release(&swap.lock); 
+
+  // write data in swap space
+  swapwrite(P2V(victim->vaddr), blkno); 
+
+  // update page status 
+  victim->vaddr = (char *)(blkno << SWAP_OFFSET);  // ??? ???
+  victim->pgdir = 0; 
+  victim->swapped = 1; // ???
+
+  pte_t *pte = walkpgdir(victim->pgdir, victim->vaddr, 0); 
+  if (pte) {
+    *pte = (blkno << SWAP_OFFSET) | PTE_SWAP; // Mark the PTE as swapped with the swap slot address
+  }
+
+  lru_remove(P2V(victim->vaddr)); 
+
+  kfree(P2V(victim->vaddr)); 
+  
+}
+  
 
 
 // 3. swap-in
-
 // swapin
+struct page* swapin(pde_t *pgdir, char *vaddr) {
   // victim page) backing store -> main mem.
+
+  char *new_page = kalloc();
+  if (!new_page) return 0; // OOM 처리
+
+  pte_t *pte = walkpgdir(pgdir, vaddr, 0);
+  if (!pte || !(*pte & PTE_SWAP)) {
+    panic("swapin: Invalid swap PTE");
+  }
+
+  int blkno = (*pte) >> SWAP_OFFSET; // ???
+  swapread(new_page, blkno);
+
+  *pte = V2P(new_page) | PTE_P | PTE_W | PTE_U;
+
+  acquire(&swap.lock);
+  clear_swap_slot(blkno);
+  release(&swap.lock);
+
+  struct page *page = find_page(pgdir, vaddr); // ???
+  page->vaddr = vaddr;
+  page->pgdir = pgdir;
+  page->swapped = 0;
+
+  lru_add(page);
+  return page;
+}
 
 
 // 4. Bitmap mgmt
+int find_blkno(){ // ???
+  for (int i = 0; i < SWAPMAX; i++){
+    if(!swap.bitmap[i]) return i; 
+  }
+  return -1; // fail
+}
+
+void set_bitmap(int blk){
+  swap.bitmap[blk] = 1; 
+}
+
+void clear_bitmap(int blk) {
+  swap.bitmap[blk] = 0;
+}

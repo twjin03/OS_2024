@@ -25,7 +25,7 @@ struct { // physical memory mgmt
 
 struct page pages[PHYSTOP/PGSIZE];
 struct page *page_lru_head;
-int num_free_pages;
+int num_free_pages = PHYSTOP/PGSIZE;
 int num_lru_pages;
 
 struct{
@@ -72,6 +72,7 @@ kinit2(void *vstart, void *vend)
 
   // initialize LRU list 
   initlock(&lru_lock, "lru_lock"); 
+  num_lru_pages = 0; 
 
 }
 // initialize pages in given memory area and insert to linked-list by calling kfree
@@ -112,22 +113,49 @@ kfree(char *v)
 // Returns a pointer that the kernel can use.
 // Returns 0 if the memory cannot be allocated.
 
-char*
-kalloc(void)
-{
+
+char* kalloc(void) {
   struct run *r;
 
-//try_again:
-  if(kmem.use_lock)
+try_again:
+  if (kmem.use_lock)
     acquire(&kmem.lock);
   r = kmem.freelist;
-//  if(!r && reclaim())
-//	  goto try_again;
-  if(r)
-    kmem.freelist = r->next;
-  if(kmem.use_lock)
+
+  if (!r) {
+    if (kmem.use_lock)
+      release(&kmem.lock);
+
+    // attempt page reclaim
+    if (!reclaim()) {
+      // If reclaim fails
+      cprintf("kalloc: OOM after reclaim attempt\n");
+      return 0; // Allocation failed
+    }
+    // After reclaiming, retry allocation
+    goto try_again;
+  }
+
+  // Allocate the page from freelist
+  kmem.freelist = r->next;
+
+  if (kmem.use_lock)
     release(&kmem.lock);
+
   return (char*)r;
+}
+
+
+int reclaim(){
+  struct page *victim = select_victim(); 
+
+  if (!victim){
+    cprintf("reclaim: OOM\n"); 
+    return 0; // fail 
+  }
+
+  swapout(victim); 
+  return 1; // success
 }
 
 
@@ -223,7 +251,9 @@ kalloc(void)
 // lru_add
   // add page to the tail of LRU list 
   // (circular doubly linked list)
-void lru_add(struct page *page){ // 추가할 page를 인자로 받음 
+void lru_add(struct page *page){ // 추가할 page를 인자로 받음
+  acquire(&lru_lock);
+
   if(!page_lru_head){
     page_lru_head = page; 
     page->next = page; 
@@ -236,11 +266,16 @@ void lru_add(struct page *page){ // 추가할 page를 인자로 받음
     page->next = page_lru_head; 
     page_lru_head->prev = page; 
   }
-  num_lru_pages++;
+  num_lru_pages++; // swappable page ???
+  // num_free_pages--; // not in use ???
+
+  release(&lru_lock);
 }
 
 // lru_remove
 void lru_remove(struct page *page){
+acquire(&lru_lock);
+
   if (page->next == page){ // single node
     page_lru_head = 0; 
   }
@@ -250,8 +285,11 @@ void lru_remove(struct page *page){
     if (page_lru_head == page)
     page_lru_head = page->next; 
   }
-  page->next = page->prev = 0; 
+  page->next = page->prev = 0;  // memset 이용 ???
   num_lru_pages--; 
+  // num_free_pages++; 
+
+  release(&lru_lock);
 }
 
 // select_victim 
@@ -276,7 +314,6 @@ struct page* select_victim(){
 
 
 // 2. swap-out
-
 // swapout
 void swapout(struct page *victim){
   // victim page) main mem. -> backing store
@@ -286,7 +323,7 @@ void swapout(struct page *victim){
 
   acquire(&swap.lock);
   blkno = find_blkno(); 
-  if (blkno<0){
+  if (blkno < 0){
     release(&swap.lock); 
     panic("swapout: No swap space"); 
   } 
@@ -299,7 +336,7 @@ void swapout(struct page *victim){
   // update page status 
   victim->vaddr = (char *)(blkno << SWAP_OFFSET);  // ??? ???
   victim->pgdir = 0; 
-  victim->swapped = 1; // ???
+  victim->swapped = 1; // swapped됨을 표시 ???
 
   pte_t *pte = walkpgdir(victim->pgdir, victim->vaddr, 0); 
   if (pte) {
@@ -319,7 +356,7 @@ void swapout(struct page *victim){
 struct page* swapin(pde_t *pgdir, char *vaddr) {
   // victim page) backing store -> main mem.
 
-  char *new_page = kalloc();
+  char *new_page = kalloc(); // 1. Get new physical page
   if (!new_page) return 0; // OOM 처리
 
   pte_t *pte = walkpgdir(pgdir, vaddr, 0);
@@ -328,12 +365,14 @@ struct page* swapin(pde_t *pgdir, char *vaddr) {
   }
 
   int blkno = (*pte) >> SWAP_OFFSET; // ???
-  swapread(new_page, blkno);
+  swapread(new_page, blkno); // 2. Using swapread() function, read from swap space to physical page
+
 
   *pte = V2P(new_page) | PTE_P | PTE_W | PTE_U;
+  // 3. Change PTE value with physical address & set PTE_P
 
   acquire(&swap.lock);
-  clear_swap_slot(blkno);
+  clear_bitmap(blkno);
   release(&swap.lock);
 
   struct page *page = find_page(pgdir, vaddr); // ???

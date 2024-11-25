@@ -102,3 +102,76 @@ kalloc(void)
   return (char*)r;
 }
 
+// • Implement page-level swapping
+// – Swap-in: move the victim page from backing store to main memory
+// – Swap-out: move the victim page from main memory to backing store
+
+// • Manage swappable pages with LRU list
+// – Page replacement policy: clock algorithm
+
+// • Codes you need to create or modify in xv6
+// – Swap-in, swap-out operation
+// – LRU list management
+// – Some extras
+
+
+
+// ** Swappable Pages in xv6 
+
+// • Only user pages are swappable
+  // – Some of physical pages should not be swapped out
+  // • E.g., page table pages
+  // – So, manage swappable pages with LRU list (circular doubly linked list)
+  // • When init/alloc/dealloc/copy user virtual memories
+
+// • Page replacement algorithm: clock algorithm
+  // – Use A (Accessed) bit in each PTE (PTE_A : 0x20)
+  // – From lru_head, select a victim page following next pointer
+  // • If PTE_A==1, clear it and send the page to the tail of LRU list
+  // • If PTE_A==0, evict the page (victim page)
+  // – QEMU automatically sets PTE_A bit when accessed
+// • If free page is not obtained through the kalloc() function,
+// swap-out the victim page
+
+
+// ** Swap-out operation in xv6
+// 1. Use swapwrite() function, write the victim page in swap space
+// – swapwrite() will be provided in skeleton code
+// 2. Victim page’s PTE will be set as swap space offset
+// 3. PTE_P will be cleared
+
+
+// ** Swap-in Opertion in xv6
+// • When accessing a page that has been swapped out
+// 1. Get new physical page
+// 2. Using swapread() function, read from swap space to
+// physical page
+// • swapread() will be provided in skeleton code
+// 3. Change PTE value with physical address & set PTE_P
+// • Tip: do not need to call mappages(), because page table had alre
+// ady been allocated
+
+
+
+// ** Several Considerations and Assumptions
+// • Use 1 physical page for bitmap to track swap space
+// – Bit in bitmap is set when page swapped out to swap space
+// – Bit in bitmap is cleared when page swapped in
+
+// • When user virtual memory is copied
+// – Present pages should be copied
+// – Swapped-out pages should also be copied
+
+// • When user virtual memory is deallocated
+// – Present pages should be freed, set PTE bits to 0 and remove
+// them from LRU list
+// – Swapped-out pages should be cleared in bitmap and set PTE
+// bits to 0
+
+// • When swap-out should be occurred and there is no page in LRU list,
+// OOM(Out of memory) error should occur
+// • Inside the kalloc function, just cprintf error message
+// • kalloc should return 0 when OOM occurs
+// • Lock should be considered with shared resource for synchronization
+// • All pages are managed in a struct page
+// – Already implemented in skeleton code (mmu.h)

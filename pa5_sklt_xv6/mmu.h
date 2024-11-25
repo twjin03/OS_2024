@@ -178,6 +178,8 @@ struct gatedesc {
   (gate).off_31_16 = (uint)(off) >> 16;                  \
 }
 
+// used in pa4 
+// All pages are managed in a struct page
 struct page{
 	struct page *next;
 	struct page *prev;

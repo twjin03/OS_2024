@@ -671,6 +671,9 @@ nameiparent(char *path, char *name)
   return namex(path, 1, name);
 }
 
+
+// pa4) Skeleton Code 
+// Functions to read/write from/to swap space are provided
 void swapread(char* ptr, int blkno)
 {
 	struct buf* bp;

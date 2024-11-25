@@ -8,7 +8,7 @@
 #include "traps.h"
 #include "memlayout.h"
 
-
+// pa4) Skeleton
 int main () {
 	int a, b;
 

@@ -128,15 +128,6 @@ kalloc(void)
   // – So, manage swappable pages with LRU list (circular doubly linked list)
   // • When init/alloc/dealloc/copy user virtual memories
 
-// • Page replacement algorithm: clock algorithm
-  // – Use A (Accessed) bit in each PTE (PTE_A : 0x20)
-  // – From lru_head, select a victim page following next pointer
-  // • If PTE_A==1, clear it and send the page to the tail of LRU list
-  // • If PTE_A==0, evict the page (victim page)
-  // – QEMU automatically sets PTE_A bit when accessed
-// • If free page is not obtained through the kalloc() function,
-// swap-out the victim page
-
 
 // ** Swap-out operation in xv6
 // 1. Use swapwrite() function, write the victim page in swap space
@@ -230,6 +221,23 @@ void lru_remove(struct page *page){
 }
 
 // select_victim 
+struct page* select_victim(){
+  struct page *current = page_lru_head; 
+
+  while (num_lru_pages > 0){
+    pte_t *pte = walkpgdir(current->pgdir, current->vaddr, 0); 
+    if (!pte) panic("select_victim: invalid PTE"); // ???
+
+    if (*pte & PTE_A){ // If PTE_A==1,
+      *pte &= ~PTE_A; // clear it
+      current = current->next;  // and send the page to the tail of LRU list
+    }
+    else{ // If PTE_A==0
+      return current; // evict the page (victim page)
+    }
+  }
+  return 0; // fail to select victim -> OOM  ???
+}
 
 
 

@@ -185,8 +185,8 @@ struct gatedesc {
 struct page{
 	struct page *next;
 	struct page *prev;
-	pde_t *pgdir;
-	char *vaddr;
+	pde_t *pgdir; // pte는 PTE의 data type
+	char *vaddr; // virtual address of the page
 };
 
 

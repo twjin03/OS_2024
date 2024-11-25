@@ -71,6 +71,8 @@ void            kfree(char*);
 void            kinit1(void*, void*);
 void            kinit2(void*, void*);
 
+pte_t *         walkpgdir(pte_t *pgdir, const void *va, int alloc); 
+
 // kbd.c
 void            kbdintr(void);
 

@@ -196,18 +196,38 @@ kalloc(void)
 
 
 // lru_add
-void lru_add(struct page *page){
+  // add page to the tail of LRU list 
+  // (circular doubly linked list)
+void lru_add(struct page *page){ // 추가할 page를 인자로 받음 
   if(!page_lru_head){
     page_lru_head = page; 
     page->next = page; 
     page->prev = page; 
   }
-  else{
-    struct page *tail 
+  else{ // tail에 추가
+    struct page *tail = page_lru_head->prev; 
+    tail->next = page; 
+    page->prev = tail; 
+    page->next = page_lru_head; 
+    page_lru_head->prev = page; 
   }
+  num_lru_pages++;
 }
 
 // lru_remove
+void lru_remove(struct page *page){
+  if (page->next == page){ // single node
+    page_lru_head = 0; 
+  }
+  else{
+    page->prev->next = page->next;
+    page->next->prev = page->prev;
+    if (page_lru_head == page)
+    page_lru_head = page->next; 
+  }
+  page->next = page->prev = 0; 
+  num_lru_pages--; 
+}
 
 // select_victim 
 

@@ -43,6 +43,17 @@ kinit1(void *vstart, void *vend)
 {
   initlock(&kmem.lock, "kmem");
   kmem.use_lock = 0;
+
+  // pa4) 
+  // initialize pages[]
+  for (int i = 0; i < PHYSTOP/PGSIZE; i++){
+    pages[i].pgdir = 0; 
+    pages[i].vaddr = 0; 
+    pages[i].next = 0; 
+    pages[i].prev = 0; 
+  }
+
+
   freerange(vstart, vend);
 }
 

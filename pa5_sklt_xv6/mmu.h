@@ -189,8 +189,8 @@ struct page{
 	pde_t *pgdir; // pte는 PTE의 data type
 	char *vaddr; // virtual address of the page
   // ??? ??? 
-  // int swapped; // Flag to indicate if the page is swapped out (1 = swapped, 0 = not swapped)
-  uint swap_offset;  // pa4) metadata for swapped-out pages, e.g., swap space offset.
+  int swapped; // Flag to indicate if the page is swapped out (1 = swapped, 0 = not swapped)
+  uint swap_offset; 
 };
 
 

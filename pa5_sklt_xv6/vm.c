@@ -181,7 +181,7 @@ switchuvm(struct proc *p) // 특정 프로세스 p의 페이지 테이블을 활
 
 // Load the initcode into address 0 of pgdir.
 // sz must be less than a page.
-void
+void // ??? lru ???
 inituvm(pde_t *pgdir, char *init, uint sz) //초기 사용자 프로그램 코드를 프로세스의 주소 공간에 로드
 {
   char *mem;

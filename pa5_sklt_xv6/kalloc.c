@@ -254,12 +254,19 @@ int reclaim(){
   // add page to the tail of LRU list 
   // (circular doubly linked list)
 void lru_add(struct page *page){ // 추가할 page를 인자로 받음
+
+  // ??? find free page 할 필요 ???
+  
   acquire(&lru_lock);
 
-  if(!page_lru_head){
+  if(!page_lru_head){ // 리스트에 아무 페이지도 없는 경우 
     page_lru_head = page; 
     page->next = page; 
     page->prev = page; 
+
+    // vaddr, pgdir도 set ??? ??? current_는 swapin함수 안에서 이미 페이지 할당을 함 lru_add에서는 연결만 수행
+    //page->pgdir = current_pgdir; // Assuming current_pgdir is the page directory for the page
+    //page->vaddr = current_vaddr; // Assuming current_vaddr is the virtual address associated with the page
   }
   else{ // tail에 추가
     struct page *tail = page_lru_head->prev; 
@@ -267,9 +274,13 @@ void lru_add(struct page *page){ // 추가할 page를 인자로 받음
     page->prev = tail; 
     page->next = page_lru_head; 
     page_lru_head->prev = page; 
+
+    // Set properties like vaddr and pgdir here
+    //page->pgdir = current_pgdir; // Same assumption as above
+    //page->vaddr = current_vaddr; // Same assumption as above
   }
   num_lru_pages++; // swappable page ???
-  num_free_pages--; // not in use ???
+  num_free_pages--; // not in use ???  근데 여기서는 이미 할당된 페이지를 연결만 한건데... ???
 
   release(&lru_lock);
 }
@@ -340,8 +351,13 @@ void swapout(struct page *victim){
   if (!pte) {
     panic("swapout: Invalid PTE");
   }
-  *pte = (blkno << SWAP_OFFSET) | PTE_SWAP; // Set PTE as swapped
-  victim->swapped = 1;
+
+  // Clear the PTE and set the page's swap offset
+  *pte = (blkno << 12); // Store the swap block number in the PTE
+  *pte &= ~PTE_P;        // Mark the page as not present in physical memory
+
+  victim->swapped = 1; 
+  victim->swap_offset = blkno; // Store the swap block number in the page metadata
 
   lru_remove(P2V(victim->vaddr)); 
 }
@@ -357,14 +373,22 @@ struct page* swapin(pde_t *pgdir, char *vaddr) {
   if (!new_page) return 0; // OOM 처리
 
   pte_t *pte = walkpgdir(pgdir, vaddr, 0);
-  if (!pte || !(*pte & PTE_SWAP)) {
-    panic("swapin: Invalid swap PTE");
+  if (!pte || !(*pte & PTE_P)) {
+    panic("swapin: Invalid PTE or the page is already present");
   }
 
-  int blkno = (*pte) >> SWAP_OFFSET; // ???
+  // Check if the page was swapped out (using the swapped flag or the swap_offset)
+  struct page *victim = &pages[V2P(vaddr) / PGSIZE];
+  if (!victim->swapped) {
+      panic("swapin: The page was not swapped out");
+  }
+  
+  // Get the block number (swap offset) from the victim's metadata
+  int blkno = victim->swap_offset; 
+
   swapread(new_page, blkno); // 2. Using swapread() function, read from swap space to physical page
 
-
+  // Update the PTE to reflect the new physical address and mark the page as present
   *pte = V2P(new_page) | PTE_P | PTE_W | PTE_U;
   // 3. Change PTE value with physical address & set PTE_P
 
@@ -372,13 +396,14 @@ struct page* swapin(pde_t *pgdir, char *vaddr) {
   clear_bitmap(blkno);
   release(&swap.lock);
 
-  struct page *page = &pages[V2P(new_page) / PGSIZE];
-  page->vaddr = vaddr;
-  page->pgdir = pgdir;
-  page->swapped = 0;
+  // Update the victim page struct
+  victim->vaddr = vaddr;
+  victim->pgdir = pgdir;
+  victim->swapped = 0;  // Page is no longer swapped
 
-  lru_add(page);
-  return page;
+  lru_add(victim);
+  
+  return victim;  // Return the swapped-in page
 }
 
 

@@ -46,14 +46,14 @@ kinit1(void *vstart, void *vend)
   initlock(&kmem.lock, "kmem");
   kmem.use_lock = 0;
 
-  // pa4) 
-  // initialize pages[]
-  for (int i = 0; i < PHYSTOP/PGSIZE; i++){
-    pages[i].pgdir = 0; 
-    pages[i].vaddr = 0; 
-    pages[i].next = 0; 
-    pages[i].prev = 0; 
-  }
+  // // pa4) 
+  // // initialize pages[]
+  // for (int i = 0; i < PHYSTOP/PGSIZE; i++){
+  //   pages[i].pgdir = 0; 
+  //   pages[i].vaddr = 0; 
+  //   pages[i].next = 0; 
+  //   pages[i].prev = 0; 
+  // }
 
 
   freerange(vstart, vend);
@@ -269,7 +269,7 @@ void lru_add(struct page *page){ // 추가할 page를 인자로 받음
     page_lru_head->prev = page; 
   }
   num_lru_pages++; // swappable page ???
-  // num_free_pages--; // not in use ???
+  num_free_pages--; // not in use ???
 
   release(&lru_lock);
 }
@@ -289,7 +289,7 @@ acquire(&lru_lock);
   }
   page->next = page->prev = 0;  // memset 이용 ???
   num_lru_pages--; 
-  // num_free_pages++; 
+  num_free_pages++; 
 
   release(&lru_lock);
 }
@@ -324,7 +324,7 @@ void swapout(struct page *victim){
   int blkno; 
 
   acquire(&swap.lock);
-  blkno = find_blkno(); 
+  blkno = find_free_blkno(); 
   if (blkno < 0){
     release(&swap.lock); 
     panic("swapout: No swap space"); 

@@ -294,7 +294,7 @@ acquire(&lru_lock);
   release(&lru_lock);
 }
 
-// select_victim 
+// select_victim ) LRU 
 struct page* select_victim(){
   struct page *current = page_lru_head; 
 
@@ -382,7 +382,9 @@ struct page* swapin(pde_t *pgdir, char *vaddr) {
 }
 
 
-// 4. Bitmap mgmt
+// 4. Bitmap) swap space mgmt
+// Use a bitmap to track swap space (1 page of physical memory allocated for this purpose).
+// Each bit in the bitmap corresponds to one page in the swap space.
 void set_bitmap(int blkno) {
   int index = blkno - SWAPBASE; // SWAPBASE 기준으로 블록 번호 변환
   if (index < 0 || index >= SWAPMAX) {

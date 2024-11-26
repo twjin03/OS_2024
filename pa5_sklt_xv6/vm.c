@@ -32,6 +32,8 @@ seginit(void)
 // Return the address of the PTE in page table pgdir
 // that corresponds to virtual address va.  If alloc!=0,
 // create any required page table pages.
+
+// 주어진 가상 주소 va에 해당하는 페이지 테이블 엔트리(PTE)를 찾거나, 필요시 생성
 pte_t *
 walkpgdir(pde_t *pgdir, const void *va, int alloc)
 {
@@ -116,7 +118,7 @@ static struct kmap {
 
 // Set up kernel part of a page table.
 pde_t*
-setupkvm(void)
+setupkvm(void) // create page table for kernel
 {
   pde_t *pgdir;
   struct kmap *k;
@@ -138,7 +140,7 @@ setupkvm(void)
 // Allocate one page table for the machine for the kernel address
 // space for scheduler processes.
 void
-kvmalloc(void)
+kvmalloc(void) // 커널의 전역 페이지 디렉터리(kpgdir)를 생성하고 활성화.
 {
   kpgdir = setupkvm();
   switchkvm();
@@ -147,14 +149,14 @@ kvmalloc(void)
 // Switch h/w page table register to the kernel-only page table,
 // for when no process is running.
 void
-switchkvm(void)
+switchkvm(void) // PU가 커널의 페이지 디렉터리(kpgdir)를 참조하도록 설정.
 {
   lcr3(V2P(kpgdir));   // switch to the kernel page table
 }
 
 // Switch TSS and h/w page table to correspond to process p.
 void
-switchuvm(struct proc *p)
+switchuvm(struct proc *p) // 특정 프로세스 p의 페이지 테이블을 활성화.
 {
   if(p == 0)
     panic("switchuvm: no process");
@@ -180,7 +182,7 @@ switchuvm(struct proc *p)
 // Load the initcode into address 0 of pgdir.
 // sz must be less than a page.
 void
-inituvm(pde_t *pgdir, char *init, uint sz)
+inituvm(pde_t *pgdir, char *init, uint sz) //초기 사용자 프로그램 코드를 프로세스의 주소 공간에 로드
 {
   char *mem;
 
@@ -219,7 +221,7 @@ loaduvm(pde_t *pgdir, char *addr, struct inode *ip, uint offset, uint sz)
 // Allocate page tables and physical memory to grow process from oldsz to
 // newsz, which need not be page aligned.  Returns new size or 0 on error.
 int
-allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
+allocuvm(pde_t *pgdir, uint oldsz, uint newsz) // 프로세스 주소 공간을 확장
 {
   char *mem;
   uint a;
@@ -231,14 +233,14 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
   a = PGROUNDUP(oldsz);
   for(; a < newsz; a += PGSIZE){
-    mem = kalloc();
+    mem = kalloc(); // 증가된 영역에 페이지 할당 
     if(mem == 0){
       cprintf("allocuvm out of memory\n");
       deallocuvm(pgdir, newsz, oldsz);
       return 0;
     }
     memset(mem, 0, PGSIZE);
-    if(mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0){
+    if(mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0){ // 할당된 페이지를 mappages로 매핑
       cprintf("allocuvm out of memory (2)\n");
       deallocuvm(pgdir, newsz, oldsz);
       kfree(mem);
@@ -253,7 +255,7 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 // need to be less than oldsz.  oldsz can be larger than the actual
 // process size.  Returns the new process size.
 int
-deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
+deallocuvm(pde_t *pgdir, uint oldsz, uint newsz) // 프로세스 주소 공간을 축소 
 {
   pte_t *pte;
   uint a, pa;
@@ -271,7 +273,7 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       if(pa == 0)
         panic("kfree");
       char *v = P2V(pa);
-      kfree(v);
+      kfree(v); // physical mem 해제 
       *pte = 0;
     }
   }
@@ -281,7 +283,7 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 // Free a page table and all the physical memory pages
 // in the user part.
 void
-freevm(pde_t *pgdir)
+freevm(pde_t *pgdir) // 프로세스의 전체 메모리 공간 해제 
 {
   uint i;
 
@@ -313,7 +315,7 @@ clearpteu(pde_t *pgdir, char *uva)
 // Given a parent process's page table, create a copy
 // of it for a child.
 pde_t*
-copyuvm(pde_t *pgdir, uint sz)
+copyuvm(pde_t *pgdir, uint sz) // 부모 프로세스의 주소 공간을 복사해 자식 프로세스 생성 
 {
   pde_t *d;
   pte_t *pte;
@@ -331,7 +333,7 @@ copyuvm(pde_t *pgdir, uint sz)
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)
       goto bad;
-    memmove(mem, (char*)P2V(pa), PGSIZE);
+    memmove(mem, (char*)P2V(pa), PGSIZE); // 부모의 page table 순회하며 물리 페이지 복사 
     if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) {
       kfree(mem);
       goto bad;
@@ -347,23 +349,23 @@ bad:
 //PAGEBREAK!
 // Map user virtual address to kernel address.
 char*
-uva2ka(pde_t *pgdir, char *uva)
+uva2ka(pde_t *pgdir, char *uva) // 사용자 가상주소를 커널 가상 주소로 변환
 {
   pte_t *pte;
 
-  pte = walkpgdir(pgdir, uva, 0);
+  pte = walkpgdir(pgdir, uva, 0); // 페이지가 유효한지 검증 
   if((*pte & PTE_P) == 0)
     return 0;
   if((*pte & PTE_U) == 0)
     return 0;
-  return (char*)P2V(PTE_ADDR(*pte));
+  return (char*)P2V(PTE_ADDR(*pte)); // 유효한 페이지의 물리주소를 커널 주소로 변환
 }
 
 // Copy len bytes from p to user address va in page table pgdir.
 // Most useful when pgdir is not the current page table.
 // uva2ka ensures this only works for PTE_U pages.
 int
-copyout(pde_t *pgdir, uint va, void *p, uint len)
+copyout(pde_t *pgdir, uint va, void *p, uint len) // 커널 데이터를 사용자 메모리로 복사 
 {
   char *buf, *pa0;
   uint n, va0;

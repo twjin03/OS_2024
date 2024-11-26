@@ -13,5 +13,5 @@
 #define FSSIZE       100000  // size of file system in blocks
 #define SWAPBASE	500
 #define SWAPMAX		(100000 - SWAPBASE)
-#define SWAP_OFFSET 12  // ??? ???
+// #define SWAP_OFFSET 12  // ??? ???
 

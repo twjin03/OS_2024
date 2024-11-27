@@ -95,7 +95,7 @@ struct segdesc {
 #define PTE_W           0x002   // Writeable
 #define PTE_U           0x004   // User
 #define PTE_PS          0x080   // Page Size
-#define PTE_A           0x20    // Accessed 
+#define PTE_A           0x020    // Accessed 
   // QEMU automatically sets PTE_A bit when accessed
 
 // Address in page table or page directory entry

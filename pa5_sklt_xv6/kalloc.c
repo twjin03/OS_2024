@@ -35,6 +35,7 @@ struct{
 
 struct spinlock lru_lock; 
 
+
 // Initialization happens in two phases.
 // 1. main() calls kinit1() while still using entrypgdir to place just
 // the pages mapped by entrypgdir on free list.
@@ -73,6 +74,7 @@ kinit2(void *vstart, void *vend)
   // initialize LRU list 
   initlock(&lru_lock, "lru_lock"); 
   num_lru_pages = 0; 
+  page_lru_head = 0;
 
 }
 // initialize pages in given memory area and insert to linked-list by calling kfree
@@ -122,6 +124,7 @@ try_again:
     acquire(&kmem.lock);
   r = kmem.freelist;
 
+  // if freelist is empty, attempt to reclaim memory
   if (!r) {
     if (kmem.use_lock)
       release(&kmem.lock);
@@ -134,10 +137,7 @@ try_again:
     }
     // After reclaiming, retry allocation
     goto try_again;
-
-    if(kmem.use_lock) acquire(&kmem.lock); // ???
   }
-
   // Allocate the page from freelist
   kmem.freelist = r->next;
 
@@ -151,7 +151,6 @@ try_again:
   // page->pgdir = 0;
   // page->swapped = 0;
   // lru_add(page);
-
   return (char*)r;
 }
 
@@ -341,10 +340,9 @@ struct page* select_victim(){
 void swapout(struct page *victim){
   // victim page) main mem. -> backing store
   acquire(&swap.lock);
-  // allocate swap space
-  int blkno; 
 
-  blkno = find_free_blkno(); 
+  // allocate swap space
+  int blkno = find_free_blkno(); 
   if (blkno < 0){
     release(&swap.lock); 
     panic("swapout: No swap space"); 

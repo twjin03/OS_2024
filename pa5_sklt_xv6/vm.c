@@ -9,7 +9,6 @@
 
 extern struct page pages[];  // kalloc.c에서 정의된 pages 배열 참조
 
-
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
 
@@ -79,8 +78,7 @@ mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
     *pte = pa | perm | PTE_P;
 
     if (perm & PTE_U) {
-      // Instead of append_to_lru, use lru_add
-      struct page *new_page = &pages[PTE_ADDR(*pte)/ PGSIZE]; // ??? ???
+      struct page *new_page = &pages[PTE_ADDR(*pte) / PGSIZE]; // page를 올바르게 가져오기
       lru_add(new_page); // Add the page to the LRU list
     }
 
@@ -232,7 +230,7 @@ loaduvm(pde_t *pgdir, char *addr, struct inode *ip, uint offset, uint sz)
 // Allocate page tables and physical memory to grow process from oldsz to
 // newsz, which need not be page aligned.  Returns new size or 0 on error.
 int
-allocuvm(pde_t *pgdir, uint oldsz, uint newsz) // 프로세스 주소 공간을 확장
+allocuvm(pde_t *pgdir, uint oldsz, uint newsz) 
 {
   char *mem;
   uint a;
@@ -244,14 +242,14 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz) // 프로세스 주소 공간을 
 
   a = PGROUNDUP(oldsz);
   for(; a < newsz; a += PGSIZE){
-    mem = kalloc(); // 증가된 영역에 페이지 할당 
+    mem = kalloc();
     if(mem == 0){
       cprintf("allocuvm out of memory\n");
       deallocuvm(pgdir, newsz, oldsz);
       return 0;
     }
     memset(mem, 0, PGSIZE);
-    if(mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0){ // 할당된 페이지를 mappages로 매핑
+    if(mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0){
       cprintf("allocuvm out of memory (2)\n");
       deallocuvm(pgdir, newsz, oldsz);
       kfree(mem);
@@ -266,7 +264,7 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz) // 프로세스 주소 공간을 
 // need to be less than oldsz.  oldsz can be larger than the actual
 // process size.  Returns the new process size.
 int
-deallocuvm(pde_t *pgdir, uint oldsz, uint newsz) // 프로세스 주소 공간을 축소 
+deallocuvm(pde_t *pgdir, uint oldsz, uint newsz) 
 {
   pte_t *pte;
   uint a, pa;
@@ -285,20 +283,20 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz) // 프로세스 주소 공간�
         panic("kfree");
 
       // Remove the page from the LRU list
-      struct page *page = &pages[pa / PGSIZE]; // Find the corresponding page
+      struct page *page = &pages[pa / PGSIZE]; // 페이지를 LRU 리스트에서 제거
       lru_remove(page); // Remove the page from the LRU list
 
       char *v = P2V(pa);
-      kfree(v); // physical mem 해제 
+      kfree(v);
       *pte = 0;
     }
 
-    // ??? page swapped out된 경우 ??? 
     else if(*pte & PTE_U) {
       int blkno = *pte >> 12;
       clear_bitmap(blkno);
       *pte = 0;
     }
+
   }
   return newsz;
 }
@@ -365,6 +363,7 @@ copyuvm(pde_t *pgdir, uint sz) // 부모 프로세스의 주소 공간을 복사
 
     if(!(*pte & PTE_P)){ // page not present
       int target_blkno = *pte >> 12; 
+      
       if(target_blkno < 0 || target_blkno > SWAPMAX)
         continue;
       swapread((char *)tmp_swapdata, target_blkno);

@@ -8,6 +8,8 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "spinlock.h"
+#include "proc.h"
+
 
 void freerange(void *vstart, void *vend);
 extern char end[]; // first address after kernel loaded from ELF file
@@ -28,6 +30,8 @@ struct page *page_lru_head;
 int num_free_pages = PHYSTOP/PGSIZE;
 int num_lru_pages;
 
+int num_free_bitmap = (SWAPMAX / (PGSIZE / BSIZE));
+
 struct{
   struct spinlock lock; 
   char *bitmap; 
@@ -46,7 +50,7 @@ kinit1(void *vstart, void *vend)
 {
   initlock(&kmem.lock, "kmem");
   kmem.use_lock = 0;
-
+  num_free_pages = 0;
   // pa4) 
   // initialize pages[]
   for (int i = 0; i < PHYSTOP/PGSIZE; i++){
@@ -75,7 +79,6 @@ kinit2(void *vstart, void *vend)
   initlock(&lru_lock, "lru_lock"); 
   num_lru_pages = 0; 
   page_lru_head = 0;
-
 }
 // initialize pages in given memory area and insert to linked-list by calling kfree
 void
@@ -134,7 +137,9 @@ try_again:
     }
   }
   // Allocate the page from freelist
-  kmem.freelist = r->next;
+  if(r)
+    kmem.freelist = r->next;
+    
   if (kmem.use_lock)
     release(&kmem.lock);
 
@@ -150,18 +155,6 @@ try_again:
   return (char*)r;
 }
 
-
-int reclaim(){
-  struct page *victim = select_victim(); 
-
-  if (!victim){
-    cprintf("reclaim: OOM\n"); 
-    return 0; // fail 
-  }
-
-  swapout(victim); 
-  return 1; // success
-}
 
 
 // • Implement page-level swapping
@@ -308,19 +301,40 @@ void lru_remove(struct page *page){
   release(&lru_lock);
 }
 
+int reclaim(){
+  release(&kmem.lock);
+  struct page *victim = select_victim(); 
+
+  if (!victim){
+    cprintf("reclaim: OOM\n"); 
+    return 0; // fail 
+  }
+
+  swapout(victim); 
+  return 1; // success
+}
+
+
 // select_victim ) LRU 
 struct page* select_victim(){
   acquire(&lru_lock);
   struct page *current = page_lru_head; 
 
-  while (num_lru_pages > 0){
+  while (1){
     pte_t *pte = walkpgdir(current->pgdir, current->vaddr, 0); 
     if (!pte) panic("select_victim: invalid PTE"); // ???
 
     if (*pte & PTE_A){ // If PTE_A==1,
       *pte &= ~PTE_A; // clear it
+      page_lru_head = current->next;
       current = current->next;  // and send the page to the tail of LRU list
     }
+
+    else if ((*pte & PTE_U)==0){
+      struct page *page = &pages[PTE_ADDR(*pte)/ PGSIZE]; // 페이지를 LRU 리스트에서 제거
+      lru_remove(page); // Remove the page from the LRU list
+    }
+
     else{ // If PTE_A==0
       return current; // evict the page (victim page)
     }
@@ -329,13 +343,11 @@ struct page* select_victim(){
   return 0; // fail to select victim -> OOM  ???
 }
 
-
-
 // 2. swap-out
 // swapout
 void swapout(struct page *victim){
   // victim page) main mem. -> backing store
-  acquire(&swap.lock);
+  // acquire(&swap.lock);
 
   // allocate swap space
   int blkno = find_free_blkno(); 
@@ -343,17 +355,21 @@ void swapout(struct page *victim){
     release(&swap.lock); 
     panic("swapout: No swap space"); 
   } 
-  set_bitmap(blkno); 
-  release(&swap.lock); 
+   
+  // release(&swap.lock); 
 
   // write data in swap space (swap data out)
   swapwrite(P2V(victim->vaddr), blkno); 
+  set_bitmap(blkno);
 
   // Update PTE and victim status
   pte_t *pte = walkpgdir(victim->pgdir, victim->vaddr, 0);
   if (!pte) {
     panic("swapout: Invalid PTE");
   }
+
+  struct page *page = &pages[PTE_ADDR(*pte)/ PGSIZE]; // 페이지를 LRU 리스트에서 제거
+  lru_remove(page); // Remove the page from the LRU list
 
   // Clear the PTE and set the page's swap offset
   *pte = (blkno << 12); // Store the swap block number in the PTE
@@ -369,39 +385,80 @@ void swapout(struct page *victim){
 
 // 3. swap-in
 // swapin
-struct page* swapin(pde_t *pgdir, char *vaddr) {
-  // victim page) backing store -> main mem.
+// struct page* swapin(pde_t *pgdir, char *vaddr) {
+//   // 1. Get a new physical page
+//   char *new_page = kalloc();
+//   if (!new_page) {
+//     panic("swapin: Out of memory");
+//     return 0; // Redundant, just in case
+//   }
+//   memset(new_page, 0, PGSIZE); // Ensure the new page is zeroed out
 
-  char *new_page = kalloc(); // 1. Get new physical page
-  if (!new_page) return 0; // OOM 처리
+//   // 2. Locate the page table entry (PTE) for the given virtual address
+//   pte_t *pte = walkpgdir(pgdir, vaddr, 0);
+//   if (!pte || !(*pte & PTE_P)) {
+//     panic("swapin: Invalid or missing PTE");
+//   }
 
-  // Check if the page was swapped out (using the swapped flag or the swap_offset)
-  struct page *victim = &pages[V2P(vaddr) / PGSIZE];
-  if (!victim->swapped) {
-      panic("swapin: The page was not swapped out");
-  }
-  pte_t *pte = walkpgdir(pgdir, vaddr, 0);
-  // Get the block number (swap offset) from the victim's metadata
-  int blkno = *pte >> 12;
-  swapread(new_page, blkno); // 2. Using swapread() function, read from swap space to physical page
-  clear_bitmap(blkno);
+//   // 3. Validate the victim page's metadata
+//   struct page *victim = &pages[V2P(vaddr) / PGSIZE];
+//   if (!victim->swapped) {
+//     panic("swapin: The page is not marked as swapped out");
+//   }
 
-  if (!pte || !(*pte & PTE_P)) {
-    panic("swapin: Invalid PTE");
-  }
+//   // 4. Get the block number (swap offset) from the PTE
+//   int blkno = *pte >> 12;
 
-  // Update the PTE to reflect the new physical address and mark the page as present
-  *pte = V2P(new_page) | PTE_P | PTE_W | PTE_U;
-  // 3. Change PTE value with physical address & set PTE_P
+//   // 5. Read the data from swap space into the new physical page
+//   swapread(new_page, blkno);
+//   clear_bitmap(blkno); // Mark the swap block as free
 
-  // Update the victim page struct
-  victim->vaddr = vaddr;
-  victim->pgdir = pgdir;
-  victim->swapped = 0;  // Page is no longer swapped
+//   // 6. Update the victim page struct
+//   victim->vaddr = vaddr;
+//   victim->pgdir = pgdir;
+//   victim->swapped = 0; // Page is no longer swapped out
 
-  lru_add(victim);
-  return victim;  // Return the swapped-in page
+//   // 7. Update the PTE to point to the new physical address and mark it as present
+//   *pte = V2P(new_page) | PTE_P | PTE_W | PTE_U;
+
+//   // 8. Add the page back to the LRU list for future reference
+//   lru_add(victim);
+
+//   return victim; // Return the swapped-in page
+// }
+
+int swapin(uint addr) {
+    pte_t *pte = walkpgdir(myproc()->pgdir, (void *)PGROUNDDOWN(addr), 0);
+
+    // Allocate memory
+    char *mem = kalloc();
+    if(mem == 0) {
+        return -1;
+    }
+
+    // Read swapped page into memory
+    int blkno = *pte >> 12;
+
+    if (blkno < 0 || blkno >= (SWAPMAX / (PGSIZE / BSIZE))) {
+        return -1;
+    }
+
+    swapread((char *)mem, blkno);
+    clear_bitmap(blkno);
+
+    // Add to LRU list
+    struct page *new_page = &pages[PTE_ADDR(*pte) / PGSIZE]; // page를 올바르게 가져오기
+    lru_add(new_page); // Add the page to the LRU list
+
+
+    // Update page table entry
+    *pte = (*pte & ~0xFFF) | V2P(mem);
+    *pte |= PTE_P;
+    *pte |= PTE_A;
+
+    return 1;
 }
+
 
 
 // 4. Bitmap) swap space mgmt

@@ -79,7 +79,7 @@ void lru_add(struct page *page);
 void lru_remove(struct page *page);
 struct page* select_victim();
 void swapout(struct page *victim);
-struct page* swapin(pde_t *pgdir, char *vaddr);
+int swapin(uint addr);
 void set_bitmap(int blkno);
 void clear_bitmap(int blkno);
 // int is_blk_used(int blkno);

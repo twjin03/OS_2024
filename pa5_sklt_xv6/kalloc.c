@@ -144,6 +144,14 @@ try_again:
   if (kmem.use_lock)
     release(&kmem.lock);
 
+  // Initialize metadata and add to LRU list
+  struct page *page = &pages[V2P((char *)r) / PGSIZE];
+  memset((void *)page, 0, sizeof(struct page));
+  page->vaddr = 0; // This will be set on mapping
+  page->pgdir = 0;
+  page->swapped = 0;
+  lru_add(page);
+
   return (char*)r;
 }
 
@@ -307,6 +315,7 @@ acquire(&lru_lock);
 
 // select_victim ) LRU 
 struct page* select_victim(){
+  acquire(&lru_lock);
   struct page *current = page_lru_head; 
 
   while (num_lru_pages > 0){
@@ -321,6 +330,7 @@ struct page* select_victim(){
       return current; // evict the page (victim page)
     }
   }
+  release(&lru_lock);
   return 0; // fail to select victim -> OOM  ???
 }
 
@@ -330,11 +340,10 @@ struct page* select_victim(){
 // swapout
 void swapout(struct page *victim){
   // victim page) main mem. -> backing store
-
+  acquire(&swap.lock);
   // allocate swap space
   int blkno; 
 
-  acquire(&swap.lock);
   blkno = find_free_blkno(); 
   if (blkno < 0){
     release(&swap.lock); 
@@ -359,7 +368,7 @@ void swapout(struct page *victim){
   victim->swapped = 1; 
   victim->swap_offset = blkno; // Store the swap block number in the page metadata
 
-  lru_remove(P2V(victim->vaddr)); 
+  lru_remove(victim);
 }
   
 
@@ -372,11 +381,6 @@ struct page* swapin(pde_t *pgdir, char *vaddr) {
   char *new_page = kalloc(); // 1. Get new physical page
   if (!new_page) return 0; // OOM 처리
 
-  pte_t *pte = walkpgdir(pgdir, vaddr, 0);
-  if (!pte || !(*pte & PTE_P)) {
-    panic("swapin: Invalid PTE or the page is already present");
-  }
-
   // Check if the page was swapped out (using the swapped flag or the swap_offset)
   struct page *victim = &pages[V2P(vaddr) / PGSIZE];
   if (!victim->swapped) {
@@ -385,8 +389,12 @@ struct page* swapin(pde_t *pgdir, char *vaddr) {
   
   // Get the block number (swap offset) from the victim's metadata
   int blkno = victim->swap_offset; 
-
   swapread(new_page, blkno); // 2. Using swapread() function, read from swap space to physical page
+
+  pte_t *pte = walkpgdir(pgdir, vaddr, 0);
+  if (!pte || !(*pte & PTE_P)) {
+    panic("swapin: Invalid PTE");
+  }
 
   // Update the PTE to reflect the new physical address and mark the page as present
   *pte = V2P(new_page) | PTE_P | PTE_W | PTE_U;
@@ -402,7 +410,6 @@ struct page* swapin(pde_t *pgdir, char *vaddr) {
   victim->swapped = 0;  // Page is no longer swapped
 
   lru_add(victim);
-  
   return victim;  // Return the swapped-in page
 }
 
@@ -417,7 +424,7 @@ void set_bitmap(int blkno) {
   }
 
   acquire(&swap.lock); 
-  swap.bitmap[index / 8] |= (1 << (index % 8)); // 해당 비트를 1로 설정
+  swap.bitmap[index / 8] |= (1 << (index % 8)); // mark block as used
   release(&swap.lock); 
 }
 
@@ -433,17 +440,17 @@ void clear_bitmap(int blkno) {
 }
 
 // ???
-int is_blk_used(int blkno) {
-  int index = blkno - SWAPBASE; // SWAPBASE 기준으로 블록 번호 변환
-  if (index < 0 || index >= SWAPMAX) {
-    panic("is_blk_used: Invalid blkno");
-  }
+// int is_blk_used(int blkno) {
+//   int index = blkno - SWAPBASE; // SWAPBASE 기준으로 블록 번호 변환
+//   if (index < 0 || index >= SWAPMAX) {
+//     panic("is_blk_used: Invalid blkno");
+//   }
 
-  acquire(&swap.lock);
-  int used = (swap.bitmap[index / 8] & (1 << (index % 8))) != 0; // 비트 확인
-  release(&swap.lock); 
-  return used;
-}
+//   acquire(&swap.lock);
+//   int used = (swap.bitmap[index / 8] & (1 << (index % 8))) != 0; // 비트 확인
+//   release(&swap.lock); 
+//   return used;
+// }
 
 // ??? ???
 // 빈 스왑 블록 탐색
@@ -462,7 +469,7 @@ int find_free_blkno() {
   return -1; // 빈 블록 없음
 }
 
-// 스왑 블록 해제
-void free_blkno(int blkno) {
-  clear_bitmap(blkno); // 비트 해제
-}
+// // 스왑 블록 해제
+// void free_blkno(int blkno) {
+//   clear_bitmap(blkno); // 비트 해제
+// }

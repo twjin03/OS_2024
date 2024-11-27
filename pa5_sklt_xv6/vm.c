@@ -7,6 +7,9 @@
 #include "proc.h"
 #include "elf.h"
 
+extern struct page pages[];  // kalloc.c에서 정의된 pages 배열 참조
+
+
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
 
@@ -34,6 +37,7 @@ seginit(void)
 // create any required page table pages.
 
 // 주어진 가상 주소 va에 해당하는 페이지 테이블 엔트리(PTE)를 찾거나, 필요시 생성
+// pa4) update the last_access field every time a page is accessed ???
 pte_t *
 walkpgdir(pde_t *pgdir, const void *va, int alloc)
 {
@@ -73,6 +77,13 @@ mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
     if(*pte & PTE_P)
       panic("remap");
     *pte = pa | perm | PTE_P;
+
+    if (perm & PTE_U) {
+      // Instead of append_to_lru, use lru_add
+      struct page *new_page = &pages[PTE_ADDR(*pte)/ PGSIZE]; // ??? ???
+      lru_add(new_page); // Add the page to the LRU list
+    }
+
     if(a == last)
       break;
     a += PGSIZE;
@@ -272,8 +283,20 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz) // 프로세스 주소 공간�
       pa = PTE_ADDR(*pte);
       if(pa == 0)
         panic("kfree");
+
+      // Remove the page from the LRU list
+      struct page *page = &pages[pa / PGSIZE]; // Find the corresponding page
+      lru_remove(page); // Remove the page from the LRU list
+
       char *v = P2V(pa);
       kfree(v); // physical mem 해제 
+      *pte = 0;
+    }
+
+    // ??? page swapped out된 경우 ??? 
+    else if(*pte & PTE_U) {
+      int blkno = *pte >> 12;
+      clear_bitmap(blkno);
       *pte = 0;
     }
   }
@@ -310,6 +333,12 @@ clearpteu(pde_t *pgdir, char *uva)
   if(pte == 0)
     panic("clearpteu");
   *pte &= ~PTE_U;
+
+  char *addr = P2V(PTE_ADDR(*pte));
+
+  // If the page is present in memory, remove it from the LRU list
+  struct page *page = &pages[(uint)addr / PGSIZE]; // Find the page struct
+  lru_remove(page); // Remove the page from the LRU list
 }
 
 // Given a parent process's page table, create a copy
@@ -324,24 +353,58 @@ copyuvm(pde_t *pgdir, uint sz) // 부모 프로세스의 주소 공간을 복사
 
   if((d = setupkvm()) == 0)
     return 0;
+
+  char *tmp_swapdata;
+  if ((tmp_swapdata = kalloc()) == 0) {
+    goto bad;
+  }
+
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
       panic("copyuvm: pte should exist");
-    if(!(*pte & PTE_P))
-      panic("copyuvm: page not present");
+
+    if(!(*pte & PTE_P)){ // page not present
+      int target_blkno = *pte >> 12; 
+      if(target_blkno < 0 || target_blkno > SWAPMAX)
+        continue;
+      swapread((char *)tmp_swapdata, target_blkno);
+
+      int copy_blkno = get_blkno();
+      if (copy_blkno == -1) {
+        goto bad;
+      }
+      swapwrite((char *)tmp_swapdata, copy_blkno);
+
+      // Update PTE in the child's page table
+      pte_t *copy_pte = walkpgdir(d, (void *)i, 0);
+      *copy_pte = (copy_blkno << 12) | PTE_FLAGS(*pte);
+      continue;
+      // panic("copyuvm: page not present");
+    }
+      
     pa = PTE_ADDR(*pte);
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)
       goto bad;
     memmove(mem, (char*)P2V(pa), PGSIZE); // 부모의 page table 순회하며 물리 페이지 복사 
+
+    // ??? ???
+    // Add the new physical page to the LRU list
+    // struct page *new_page = (struct page *)mem;  // Assuming page struct is created during allocation
+    // lru_add(new_page);
+
     if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) {
       kfree(mem);
       goto bad;
     }
   }
+  kfree(tmp_swapdata);
   return d;
 
 bad:
+  if (tmp_swapdata) {
+    kfree(tmp_swapdata);
+  }
   freevm(d);
   return 0;
 }

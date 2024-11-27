@@ -126,31 +126,27 @@ try_again:
 
   // if freelist is empty, attempt to reclaim memory
   if (!r) {
-    if (kmem.use_lock)
-      release(&kmem.lock);
+    if (reclaim()) goto try_again;
 
-    // attempt page reclaim
-    if (!reclaim()) {
-      // If reclaim fails
+    else{
       cprintf("kalloc: OOM after reclaim attempt\n");
       return 0; // Allocation failed
     }
-    // After reclaiming, retry allocation
-    goto try_again;
   }
   // Allocate the page from freelist
   kmem.freelist = r->next;
-
   if (kmem.use_lock)
     release(&kmem.lock);
 
-  // // Initialize metadata and add to LRU list
-  // struct page *page = &pages[V2P((char *)r) / PGSIZE];
-  // memset((void *)page, 0, sizeof(struct page));
-  // page->vaddr = 0; // This will be set on mapping
-  // page->pgdir = 0;
-  // page->swapped = 0;
-  // lru_add(page);
+  num_free_pages--;
+
+//   // Initialize metadata and add to LRU list
+//   struct page *page = &pages[V2P((char *)r) / PGSIZE];
+//   memset((void *)page, 0, sizeof(struct page));
+//   page->vaddr = 0; // This will be set on mapping
+//   page->pgdir = 0;
+//   page->swapped = 0;
+//   lru_add(page);
   return (char*)r;
 }
 
@@ -294,7 +290,7 @@ void lru_add(struct page *page){ // 추가할 page를 인자로 받음
 
 // lru_remove
 void lru_remove(struct page *page){
-acquire(&lru_lock);
+  acquire(&lru_lock);
 
   if (page->next == page){ // single node
     page_lru_head = 0; 
@@ -384,12 +380,12 @@ struct page* swapin(pde_t *pgdir, char *vaddr) {
   if (!victim->swapped) {
       panic("swapin: The page was not swapped out");
   }
-  
-  // Get the block number (swap offset) from the victim's metadata
-  int blkno = victim->swap_offset; 
-  swapread(new_page, blkno); // 2. Using swapread() function, read from swap space to physical page
-
   pte_t *pte = walkpgdir(pgdir, vaddr, 0);
+  // Get the block number (swap offset) from the victim's metadata
+  int blkno = *pte >> 12;
+  swapread(new_page, blkno); // 2. Using swapread() function, read from swap space to physical page
+  clear_bitmap(blkno);
+
   if (!pte || !(*pte & PTE_P)) {
     panic("swapin: Invalid PTE");
   }
@@ -397,10 +393,6 @@ struct page* swapin(pde_t *pgdir, char *vaddr) {
   // Update the PTE to reflect the new physical address and mark the page as present
   *pte = V2P(new_page) | PTE_P | PTE_W | PTE_U;
   // 3. Change PTE value with physical address & set PTE_P
-
-  acquire(&swap.lock);
-  clear_bitmap(blkno);
-  release(&swap.lock);
 
   // Update the victim page struct
   victim->vaddr = vaddr;

@@ -11,6 +11,7 @@ struct stat;
 struct superblock;
 
 struct page;
+typedef uint pte_t; 
 
 // bio.c
 void            binit(void);

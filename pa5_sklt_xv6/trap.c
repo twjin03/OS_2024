@@ -79,9 +79,12 @@ trap(struct trapframe *tf)
     break;
 
   case T_PGFLT:
-    if(swap_in(rcr2()) >= 0)
+    // Get the current page directory and virtual address from rcr2()
+    char *vaddr = (char*) rcr2();
+    // Call swapin with the current page directory and virtual address
+    if(swapin(myproc()->pgdir, vaddr) >= 0)  // myproc()->pgdir returns the current page directory
       break;
-      
+
   //PAGEBREAK: 13
   default:
     if(myproc() == 0 || (tf->cs&3) == 0){

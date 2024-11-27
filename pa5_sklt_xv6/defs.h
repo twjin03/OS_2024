@@ -81,9 +81,9 @@ void swapout(struct page *victim);
 struct page* swapin(pde_t *pgdir, char *vaddr);
 void set_bitmap(int blkno);
 void clear_bitmap(int blkno);
-int is_blk_used(int blkno);
+// int is_blk_used(int blkno);
 int find_free_blkno();
-void free_blkno(int blkno);
+// void free_blkno(int blkno);
 
 
 pte_t *         walkpgdir(pte_t *pgdir, const void *va, int alloc); 

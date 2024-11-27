@@ -46,16 +46,14 @@ kinit1(void *vstart, void *vend)
   initlock(&kmem.lock, "kmem");
   kmem.use_lock = 0;
 
-  // // pa4) 
-  // // initialize pages[]
-  // for (int i = 0; i < PHYSTOP/PGSIZE; i++){
-  //   pages[i].pgdir = 0; 
-  //   pages[i].vaddr = 0; 
-  //   pages[i].next = 0; 
-  //   pages[i].prev = 0; 
-  // }
-
-
+  // pa4) 
+  // initialize pages[]
+  for (int i = 0; i < PHYSTOP/PGSIZE; i++){
+    pages[i].pgdir = 0; 
+    pages[i].vaddr = 0; 
+    pages[i].next = 0; 
+    pages[i].prev = 0; 
+  }
   freerange(vstart, vend);
 }
 
@@ -136,6 +134,8 @@ try_again:
     }
     // After reclaiming, retry allocation
     goto try_again;
+
+    if(kmem.use_lock) acquire(&kmem.lock); // ???
   }
 
   // Allocate the page from freelist
@@ -144,13 +144,13 @@ try_again:
   if (kmem.use_lock)
     release(&kmem.lock);
 
-  // Initialize metadata and add to LRU list
-  struct page *page = &pages[V2P((char *)r) / PGSIZE];
-  memset((void *)page, 0, sizeof(struct page));
-  page->vaddr = 0; // This will be set on mapping
-  page->pgdir = 0;
-  page->swapped = 0;
-  lru_add(page);
+  // // Initialize metadata and add to LRU list
+  // struct page *page = &pages[V2P((char *)r) / PGSIZE];
+  // memset((void *)page, 0, sizeof(struct page));
+  // page->vaddr = 0; // This will be set on mapping
+  // page->pgdir = 0;
+  // page->swapped = 0;
+  // lru_add(page);
 
   return (char*)r;
 }

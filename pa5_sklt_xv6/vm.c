@@ -369,7 +369,7 @@ copyuvm(pde_t *pgdir, uint sz) // 부모 프로세스의 주소 공간을 복사
         continue;
       swapread((char *)tmp_swapdata, target_blkno);
 
-      int copy_blkno = get_blkno();
+      int copy_blkno = find_free_blkno();
       if (copy_blkno == -1) {
         goto bad;
       }

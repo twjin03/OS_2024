@@ -370,43 +370,36 @@ copyuvm(pde_t *pgdir, uint sz) // 부모 프로세스의 주소 공간을 복사
 
       int copy_blkno = find_free_blkno();
       if (copy_blkno == -1) {
+        cprintf("copyuvm: no free block in swap space\n");
         goto bad;
       }
       swapwrite((char *)tmp_swapdata, copy_blkno);
+      *pte = (copy_blkno << 12); // Update PTE to reference new block
+    } else {
+      // Page is present in physical memory
+      pa = PTE_ADDR(*pte);
+      flags = PTE_FLAGS(*pte);
+      if((mem = kalloc()) == 0)
+        goto bad;
 
-      // Update PTE in the child's page table
-      pte_t *copy_pte = walkpgdir(d, (void *)i, 0);
-      *copy_pte = (copy_blkno << 12) | PTE_FLAGS(*pte);
-      continue;
-      // panic("copyuvm: page not present");
-    }
-      
-    pa = PTE_ADDR(*pte);
-    flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto bad;
-    memmove(mem, (char*)P2V(pa), PGSIZE); // 부모의 page table 순회하며 물리 페이지 복사 
-
-    // ??? ???
-    // Add the new physical page to the LRU list
-    // struct page *new_page = (struct page *)mem;  // Assuming page struct is created during allocation
-    // lru_add(new_page);
-
-    if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) {
-      kfree(mem);
-      goto bad;
+      memmove(mem, (char*)P2V(pa), PGSIZE);
+      if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) {
+        kfree(mem);
+        goto bad;
+      }
     }
   }
+
   kfree(tmp_swapdata);
   return d;
 
 bad:
-  if (tmp_swapdata) {
-    kfree(tmp_swapdata);
-  }
   freevm(d);
+  if (tmp_swapdata)
+    kfree(tmp_swapdata);
   return 0;
 }
+
 
 //PAGEBREAK!
 // Map user virtual address to kernel address.

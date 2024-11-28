@@ -69,14 +69,14 @@ kinit2(void *vstart, void *vend)
   kmem.use_lock = 1;
 
   // initialize swap space bitmap
-  initlock(&swap.lock, "swap_bitmap");  
+  // initlock(&swap.lock, "swap_bitmap");  
   swap.bitmap = kalloc(); // • Use 1 physical page for bitmap to track swap space
   if (!swap.bitmap)
     panic("init_swap_bitmap: Failed to allocate bitmap page");
   memset(swap.bitmap, 0, PGSIZE); 
 
   // initialize LRU list 
-  initlock(&lru_lock, "lru_lock"); 
+  // initlock(&lru_lock, "lru_lock"); 
   num_lru_pages = 0; 
   page_lru_head = 0;
 }
@@ -253,7 +253,7 @@ void lru_add(struct page *page){ // 추가할 page를 인자로 받음
 
   // ??? find free page 할 필요 ???
   
-  acquire(&lru_lock);
+  // acquire(&lru_lock);
 
   if(!page_lru_head){ // 리스트에 아무 페이지도 없는 경우 
     page_lru_head = page; 
@@ -278,12 +278,12 @@ void lru_add(struct page *page){ // 추가할 page를 인자로 받음
   num_lru_pages++; // swappable page ???
   num_free_pages--; // not in use ???  근데 여기서는 이미 할당된 페이지를 연결만 한건데... ???
 
-  release(&lru_lock);
+  // release(&lru_lock);
 }
 
 // lru_remove
 void lru_remove(struct page *page){
-  acquire(&lru_lock);
+  // acquire(&lru_lock);
 
   if (page->next == page){ // single node
     page_lru_head = 0; 
@@ -298,7 +298,7 @@ void lru_remove(struct page *page){
   num_lru_pages--; 
   num_free_pages++; 
 
-  release(&lru_lock);
+  // release(&lru_lock);
 }
 
 int reclaim(){
@@ -317,12 +317,16 @@ int reclaim(){
 
 // select_victim ) LRU 
 struct page* select_victim(){
-  acquire(&lru_lock);
+  // acquire(&lru_lock);
   struct page *current = page_lru_head; 
 
   while (1){
     pte_t *pte = walkpgdir(current->pgdir, current->vaddr, 0); 
-    if (!pte) panic("select_victim: invalid PTE"); // ???
+    if (!pte){
+      // release(&lru_lock);
+      panic("select_victim: invalid PTE"); // ???
+    }
+    
 
     if (*pte & PTE_A){ // If PTE_A==1,
       *pte &= ~PTE_A; // clear it
@@ -339,7 +343,7 @@ struct page* select_victim(){
       return current; // evict the page (victim page)
     }
   }
-  release(&lru_lock);
+  // release(&lru_lock);
   return 0; // fail to select victim -> OOM  ???
 }
 
@@ -352,7 +356,7 @@ void swapout(struct page *victim){
   // allocate swap space
   int blkno = find_free_blkno(); 
   if (blkno < 0){
-    release(&swap.lock); 
+    // release(&swap.lock); 
     panic("swapout: No swap space"); 
   } 
    
@@ -365,6 +369,7 @@ void swapout(struct page *victim){
   // Update PTE and victim status
   pte_t *pte = walkpgdir(victim->pgdir, victim->vaddr, 0);
   if (!pte) {
+    // release(&swap.lock);
     panic("swapout: Invalid PTE");
   }
 
@@ -470,9 +475,9 @@ void set_bitmap(int blkno) {
     panic("set_bitmap: Invalid blkno");
   }
 
-  acquire(&swap.lock); 
+  // acquire(&swap.lock); 
   swap.bitmap[index / 8] |= (1 << (index % 8)); // mark block as used
-  release(&swap.lock); 
+  // release(&swap.lock); 
 }
 
 void clear_bitmap(int blkno) {
@@ -481,9 +486,9 @@ void clear_bitmap(int blkno) {
     panic("clear_bitmap: Invalid blkno");
   }
 
-  acquire(&swap.lock); 
+  // acquire(&swap.lock); 
   swap.bitmap[index / 8] &= ~(1 << (index % 8)); // 해당 비트를 0으로 설정
-  release(&swap.lock); 
+  // release(&swap.lock); 
 }
 
 // ???
@@ -502,17 +507,17 @@ void clear_bitmap(int blkno) {
 // ??? ???
 // 빈 스왑 블록 탐색
 int find_free_blkno() {
-  acquire(&swap.lock); // 락 획득
+  // acquire(&swap.lock); // 락 획득
 
   for (int i = 0; i < SWAPMAX; i++) {
     if (!(swap.bitmap[i / 8] & (1 << (i % 8)))) { // 빈 비트 확인
       swap.bitmap[i / 8] |= (1 << (i % 8)); // 비트를 1로 설정 (할당)
-      release(&swap.lock); // 락 해제
+      // release(&swap.lock); // 락 해제
       return SWAPBASE + i; // 실제 블록 번호 반환
     }
   }
 
-  release(&swap.lock); // 락 해제
+  // release(&swap.lock); // 락 해제
   return -1; // 빈 블록 없음
 }
 

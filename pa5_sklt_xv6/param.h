@@ -14,3 +14,7 @@
 #define SWAPBASE	500
 #define SWAPMAX		(100000 - SWAPBASE)
 
+
+#define PGSIZE		4096
+#define BSIZE       512
+#define MAX_BITMAP_IDX (SWAPMAX / (PGSIZE / BSIZE) / 8) 
